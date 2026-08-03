@@ -5,6 +5,15 @@ import sys
 from typing import List, Dict, Optional
 
 SECRET_PATTERN = re.compile(r"(password|api[_-]?key|secret|token)", re.IGNORECASE)
+OUTDATED_DEPENDENCY_THRESHOLDS = {
+    "flask": "2.3.0",
+    "django": "4.2",
+    "requests": "2.28.0",
+    "pillow": "10.0.0",
+    "cryptography": "41.0.0",
+    "pyyaml": "6.0",
+    "sqlalchemy": "2.0",
+}
 SQL_PATTERN = re.compile(r"\b(select|insert|update|delete|from|where)\b", re.IGNORECASE)
 SENSITIVE_NAME_PATTERN = re.compile(r"(password|secret|token|user|db|session|profile|account)", re.IGNORECASE)
 
@@ -480,6 +489,72 @@ def check_file_upload_validation(source: str, file_path: str, root_dir: Optional
     return findings
 
 
+def _compare_versions(left: str, right: str) -> int:
+    left_parts = [int(part) for part in re.findall(r"\d+", left)]
+    right_parts = [int(part) for part in re.findall(r"\d+", right)]
+    while len(left_parts) < 3:
+        left_parts.append(0)
+    while len(right_parts) < 3:
+        right_parts.append(0)
+    if left_parts[:3] < right_parts[:3]:
+        return -1
+    if left_parts[:3] > right_parts[:3]:
+        return 1
+    return 0
+
+
+def _is_probably_old(version: str) -> bool:
+    parts = [int(part) for part in re.findall(r"\d+", version)]
+    if not parts:
+        return False
+    major = parts[0]
+    minor = parts[1] if len(parts) > 1 else 0
+    return major < 4 or (major == 4 and minor < 2) or (major == 2 and minor < 28)
+
+
+def check_outdated_dependencies(source: str, file_path: str, root_dir: Optional[str] = None) -> List[Dict[str, object]]:
+    findings: List[Dict[str, object]] = []
+    rel_path = os.path.relpath(file_path, root_dir or os.getcwd())
+    dependency_pattern = re.compile(r"([A-Za-z0-9_.-]+)\s*==\s*([0-9A-Za-z.+-]+)")
+
+    for match in dependency_pattern.finditer(source):
+        package_name = match.group(1).strip().lower().replace("_", "-")
+        version = match.group(2).strip()
+        line_number = source.count("\n", 0, match.start()) + 1
+
+        canonical_name = package_name
+        if canonical_name.startswith("pyyaml"):
+            canonical_name = "pyyaml"
+        elif canonical_name.startswith("pillow"):
+            canonical_name = "pillow"
+        elif canonical_name.startswith("cryptography"):
+            canonical_name = "cryptography"
+
+        threshold = OUTDATED_DEPENDENCY_THRESHOLDS.get(canonical_name)
+        if threshold and _compare_versions(version, threshold) < 0:
+            findings.append(
+                _make_finding(
+                    "Outdated Dependency",
+                    "high",
+                    rel_path,
+                    line_number,
+                    f"Package '{package_name}' is pinned to {version}, below the known vulnerable threshold of {threshold}",
+                )
+            )
+        elif _is_probably_old(version):
+            findings.append(
+                _make_finding(
+                    "Outdated Dependency",
+                    "medium",
+                    rel_path,
+                    line_number,
+                    f"Package '{package_name}' is pinned to {version}, which appears to be an older release",
+                )
+            )
+
+    return findings
+
+
 def check_api_key_on_frontend(source: str, file_path: str, root_dir: Optional[str] = None) -> List[Dict[str, object]]:
     findings: List[Dict[str, object]] = []
     rel_path = os.path.relpath(file_path, root_dir or os.getcwd())
@@ -673,15 +748,24 @@ def analyze_directory(directory: str) -> List[Dict[str, object]]:
     findings: List[Dict[str, object]] = []
     for root, _, files in os.walk(directory):
         for filename in files:
-            if filename.endswith((".py", ".html", ".js")):
-                file_path = os.path.join(root, filename)
-                if filename.endswith(".py"):
-                    findings.extend(analyze_file(file_path, directory))
-                else:
+            file_path = os.path.join(root, filename)
+            lower_name = filename.lower()
+
+            if lower_name.endswith(".py"):
+                findings.extend(analyze_file(file_path, directory))
+                if lower_name == "setup.py":
                     with open(file_path, "r", encoding="utf-8") as handle:
                         source = handle.read()
-                    findings.extend(check_insecure_token_storage(source, file_path, directory))
-                    findings.extend(check_api_key_on_frontend(source, file_path, directory))
+                    findings.extend(check_outdated_dependencies(source, file_path, directory))
+            elif lower_name.endswith((".html", ".js")):
+                with open(file_path, "r", encoding="utf-8") as handle:
+                    source = handle.read()
+                findings.extend(check_insecure_token_storage(source, file_path, directory))
+                findings.extend(check_api_key_on_frontend(source, file_path, directory))
+            elif lower_name == "requirements.txt":
+                with open(file_path, "r", encoding="utf-8") as handle:
+                    source = handle.read()
+                findings.extend(check_outdated_dependencies(source, file_path, directory))
     return findings
 
 
