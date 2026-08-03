@@ -1,7 +1,6 @@
 import ast
 import os
 import re
-import sys
 from typing import List, Dict, Optional
 
 SECRET_PATTERN = re.compile(r"(password|api[_-]?key|secret|token)", re.IGNORECASE)
@@ -445,18 +444,15 @@ def check_file_upload_validation(source: str, file_path: str, root_dir: Optional
             continue
 
         has_upload_param = False
-        upload_param_name = None
         for arg in list(node.args.args) + list(node.args.kwonlyargs):
             arg_name = arg.arg.lower()
             if any(name in arg_name for name in upload_param_names):
                 has_upload_param = True
-                upload_param_name = arg_name
                 break
             if arg.annotation is not None:
                 annotation_text = ast.unparse(arg.annotation)
                 if any(name in annotation_text for name in upload_annotation_names):
                     has_upload_param = True
-                    upload_param_name = arg_name
                     break
 
         if not has_upload_param:
@@ -563,7 +559,6 @@ def check_idor_risk(source: str, file_path: str, root_dir: Optional[str] = None)
         return findings
 
     rel_path = os.path.relpath(file_path, root_dir or os.getcwd())
-    ownership_markers = ("current_user", "user.id", "owner_id", "created_by", "request.user", "auth.user")
 
     for node in ast.walk(tree):
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -747,56 +742,7 @@ def check_row_level_security(source: str, file_path: str, root_dir: Optional[str
     return findings
 
 
-def check_api_key_on_frontend(source: str, file_path: str, root_dir: Optional[str] = None) -> List[Dict[str, object]]:
-    findings: List[Dict[str, object]] = []
-    rel_path = os.path.relpath(file_path, root_dir or os.getcwd())
-    lines = source.splitlines()
-
-    for index, line in enumerate(lines, start=1):
-        stripped = line.strip()
-        if not stripped:
-            continue
-
-        if re.search(r"\b(?:apiKey|api_key|token|secret|authToken|clientSecret)\b", line, re.IGNORECASE):
-            if re.search(r"['\"][^'\"]{4,}['\"]", line):
-                findings.append(
-                    _make_finding(
-                        "API Key Exposed on Frontend",
-                        "high",
-                        rel_path,
-                        index,
-                        "Frontend code contains a hardcoded API key, token, or secret",
-                    )
-                )
-                continue
-
-        if re.search(r"(?:Authorization\s*:\s*['\"]Bearer\s+[^'\"]+|Bearer\s+[A-Za-z0-9._~+/=-]+)", line):
-            findings.append(
-                _make_finding(
-                    "API Key Exposed on Frontend",
-                    "high",
-                    rel_path,
-                    index,
-                    "Frontend code contains a hardcoded bearer token or authorization header",
-                )
-            )
-            continue
-
-        if re.search(r"(?:sk-[A-Za-z0-9]{10,}|pk-[A-Za-z0-9]{10,}|AIza[0-9A-Za-z\-_]{10,}|AKIA[0-9A-Z]{10,})", line):
-            findings.append(
-                _make_finding(
-                    "API Key Exposed on Frontend",
-                    "high",
-                    rel_path,
-                    index,
-                    "Frontend code contains a hardcoded API key pattern",
-                )
-            )
-
-    return findings
-
-
-def analyze_file(file_path: str, root_dir: Optional[str] = None) -> List[Dict[str, object]]:
+def analyze_python_file(file_path: str, root_dir: Optional[str] = None) -> List[Dict[str, object]]:
     findings: List[Dict[str, object]] = []
     with open(file_path, "r", encoding="utf-8") as handle:
         source = handle.read()
@@ -941,37 +887,7 @@ def analyze_file(file_path: str, root_dir: Optional[str] = None) -> List[Dict[st
     return findings
 
 
-def analyze_directory(directory: str) -> List[Dict[str, object]]:
-    findings: List[Dict[str, object]] = []
-    for root, _, files in os.walk(directory):
-        for filename in files:
-            file_path = os.path.join(root, filename)
-            lower_name = filename.lower()
-
-            if lower_name.endswith(".py"):
-                findings.extend(analyze_file(file_path, directory))
-                if lower_name == "setup.py":
-                    with open(file_path, "r", encoding="utf-8") as handle:
-                        source = handle.read()
-                    findings.extend(check_outdated_dependencies(source, file_path, directory))
-            elif lower_name.endswith((".html", ".js")):
-                with open(file_path, "r", encoding="utf-8") as handle:
-                    source = handle.read()
-                findings.extend(check_insecure_token_storage(source, file_path, directory))
-                findings.extend(check_api_key_on_frontend(source, file_path, directory))
-            elif lower_name == "requirements.txt":
-                with open(file_path, "r", encoding="utf-8") as handle:
-                    source = handle.read()
-                findings.extend(check_outdated_dependencies(source, file_path, directory))
-    return findings
-
-
-def scan_directory(directory: str) -> List[Dict[str, object]]:
-    return analyze_directory(directory)
-
-
-if __name__ == "__main__":
-    target = sys.argv[1] if len(sys.argv) > 1 else "."
-    findings = analyze_directory(target)
-    for finding in findings:
-        print(finding)
+def analyze_requirements_file(file_path: str, root_dir: Optional[str] = None) -> List[Dict[str, object]]:
+    with open(file_path, "r", encoding="utf-8") as handle:
+        source = handle.read()
+    return check_outdated_dependencies(source, file_path, root_dir)
