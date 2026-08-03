@@ -6,7 +6,7 @@ on:
   pull_request:
 
 jobs:
-  Bandit:
+  bandit:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -26,7 +26,7 @@ jobs:
       - name: Run Bandit
         run: bandit -r . -x .venv
 
-  Semgrep:
+  semgrep:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -43,7 +43,7 @@ jobs:
           pip install semgrep
           semgrep --config=auto .
 
-  Dependency Audit:
+  dependency-audit:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -63,7 +63,7 @@ jobs:
       - name: Run dependency audit
         run: safety check -r requirements.txt
 
-  Secret Scan:
+  secret-scan:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -75,7 +75,7 @@ jobs:
           pip install trufflehog
           trufflehog git . --fail
 
-  Unit Tests:
+  unit-tests:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
