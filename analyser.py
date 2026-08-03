@@ -480,6 +480,55 @@ def check_file_upload_validation(source: str, file_path: str, root_dir: Optional
     return findings
 
 
+def check_api_key_on_frontend(source: str, file_path: str, root_dir: Optional[str] = None) -> List[Dict[str, object]]:
+    findings: List[Dict[str, object]] = []
+    rel_path = os.path.relpath(file_path, root_dir or os.getcwd())
+    lines = source.splitlines()
+
+    for index, line in enumerate(lines, start=1):
+        stripped = line.strip()
+        if not stripped:
+            continue
+
+        if re.search(r"\b(?:apiKey|api_key|token|secret|authToken|clientSecret)\b", line, re.IGNORECASE):
+            if re.search(r"['\"][^'\"]{4,}['\"]", line):
+                findings.append(
+                    _make_finding(
+                        "API Key Exposed on Frontend",
+                        "high",
+                        rel_path,
+                        index,
+                        "Frontend code contains a hardcoded API key, token, or secret",
+                    )
+                )
+                continue
+
+        if re.search(r"(?:Authorization\s*:\s*['\"]Bearer\s+[^'\"]+|Bearer\s+[A-Za-z0-9._~+/=-]+)", line):
+            findings.append(
+                _make_finding(
+                    "API Key Exposed on Frontend",
+                    "high",
+                    rel_path,
+                    index,
+                    "Frontend code contains a hardcoded bearer token or authorization header",
+                )
+            )
+            continue
+
+        if re.search(r"(?:sk-[A-Za-z0-9]{10,}|pk-[A-Za-z0-9]{10,}|AIza[0-9A-Za-z\-_]{10,}|AKIA[0-9A-Z]{10,})", line):
+            findings.append(
+                _make_finding(
+                    "API Key Exposed on Frontend",
+                    "high",
+                    rel_path,
+                    index,
+                    "Frontend code contains a hardcoded API key pattern",
+                )
+            )
+
+    return findings
+
+
 def analyze_file(file_path: str, root_dir: Optional[str] = None) -> List[Dict[str, object]]:
     findings: List[Dict[str, object]] = []
     with open(file_path, "r", encoding="utf-8") as handle:
@@ -632,6 +681,7 @@ def analyze_directory(directory: str) -> List[Dict[str, object]]:
                     with open(file_path, "r", encoding="utf-8") as handle:
                         source = handle.read()
                     findings.extend(check_insecure_token_storage(source, file_path, directory))
+                    findings.extend(check_api_key_on_frontend(source, file_path, directory))
     return findings
 
 
