@@ -285,7 +285,6 @@ def check_rate_limiting(source: str, file_path: str, root_dir: Optional[str] = N
         return findings
 
     rel_path = os.path.relpath(file_path, root_dir or os.getcwd())
-    route_decorator_names = {"get", "post", "put", "delete", "patch", "route", "route"}
     limiter_decorator_names = {"limit", "ratelimit"}
     limiter_imports = {"slowapi", "flask_limiter", "fastapi_limiter"}
     high_priority_routes = {"login", "register", "password", "reset", "payment", "checkout", "auth"}
@@ -308,7 +307,6 @@ def check_rate_limiting(source: str, file_path: str, root_dir: Optional[str] = N
             continue
 
         function_name = node.name.lower()
-        function_source = ast.get_source_segment(source, node) or ""
         has_limiter = False
 
         for decorator in node.decorator_list:
@@ -338,6 +336,31 @@ def check_rate_limiting(source: str, file_path: str, root_dir: Optional[str] = N
                     rel_path,
                     getattr(node, "lineno", 1),
                     "Route function has no visible rate limiting protection",
+                )
+            )
+
+    return findings
+
+
+def check_insecure_token_storage(source: str, file_path: str, root_dir: Optional[str] = None) -> List[Dict[str, object]]:
+    findings: List[Dict[str, object]] = []
+    rel_path = os.path.relpath(file_path, root_dir or os.getcwd())
+    pattern = re.compile(
+        r"(?:localStorage|sessionStorage)\s*\.\s*setItem\s*\(\s*['\"][^'\"]*(?:token|session|auth|jwt|key)[^'\"]*['\"]|(?:localStorage|sessionStorage)\s*\.\s*\w+\s*=|(?:localStorage|sessionStorage)\s*\[",
+        re.IGNORECASE,
+    )
+    sensitive_word_pattern = re.compile(r"(token|jwt|auth|session|key)", re.IGNORECASE)
+
+    for match in pattern.finditer(source):
+        line_number = source.count("\n", 0, match.start()) + 1
+        if sensitive_word_pattern.search(match.group(0)):
+            findings.append(
+                _make_finding(
+                    "Insecure Token Storage",
+                    "high",
+                    rel_path,
+                    line_number,
+                    "Sensitive token or session data is being stored in localStorage or sessionStorage instead of a secure httpOnly cookie",
                 )
             )
 
@@ -486,9 +509,14 @@ def analyze_directory(directory: str) -> List[Dict[str, object]]:
     findings: List[Dict[str, object]] = []
     for root, _, files in os.walk(directory):
         for filename in files:
-            if filename.endswith(".py"):
+            if filename.endswith((".py", ".html", ".js")):
                 file_path = os.path.join(root, filename)
-                findings.extend(analyze_file(file_path, directory))
+                if filename.endswith(".py"):
+                    findings.extend(analyze_file(file_path, directory))
+                else:
+                    with open(file_path, "r", encoding="utf-8") as handle:
+                        source = handle.read()
+                    findings.extend(check_insecure_token_storage(source, file_path, directory))
     return findings
 
 
