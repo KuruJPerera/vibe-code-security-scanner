@@ -154,7 +154,6 @@ def check_env_vars_in_source(source: str, file_path: str, root_dir: Optional[str
             continue
 
         if safe_load_pattern.search(source):
-            # Allow obvious env-loading patterns to pass without reporting.
             if isinstance(node.value, ast.Call) and (isinstance(node.value.func, ast.Attribute) and node.value.func.attr in {"getenv", "get"}) or (
                 isinstance(node.value, ast.Call) and isinstance(node.value.func, ast.Name) and node.value.func.id in {"getenv", "get"}
             ):
@@ -190,6 +189,95 @@ def check_env_vars_in_source(source: str, file_path: str, root_dir: Optional[str
     return findings
 
 
+def check_stack_trace_exposure(source: str, file_path: str, root_dir: Optional[str] = None) -> List[Dict[str, object]]:
+    findings: List[Dict[str, object]] = []
+    try:
+        tree = ast.parse(source, filename=file_path)
+    except SyntaxError:
+        return findings
+
+    rel_path = os.path.relpath(file_path, root_dir or os.getcwd())
+    exception_detail_pattern = re.compile(r"(str\(e\)|repr\(e\)|traceback|exception\(|traceback\.print_exc|traceback\.format_exc)", re.IGNORECASE)
+    logging_pattern = re.compile(r"(logging\.(error|exception|critical|warning)|logger\.(error|exception|critical|warning))", re.IGNORECASE)
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ExceptHandler):
+            continue
+
+        handler_body = node.body
+        for stmt in handler_body:
+            if isinstance(stmt, ast.Return):
+                if stmt.value is not None and isinstance(stmt.value, ast.Call):
+                    if isinstance(stmt.value.func, ast.Name) and stmt.value.func.id in {"str", "repr"}:
+                        if stmt.value.args and isinstance(stmt.value.args[0], ast.Name) and stmt.value.args[0].id == "e":
+                            findings.append(
+                                _make_finding(
+                                    "Stack Trace Exposure",
+                                    "medium",
+                                    rel_path,
+                                    getattr(stmt, "lineno", 1),
+                                    "Exception handler returns exception details directly to the user",
+                                )
+                            )
+                            break
+                if stmt.value is not None and exception_detail_pattern.search(ast.unparse(stmt.value)):
+                    findings.append(
+                        _make_finding(
+                            "Stack Trace Exposure",
+                            "medium",
+                            rel_path,
+                            getattr(stmt, "lineno", 1),
+                            "Exception handler returns exception details or tracebacks directly to the user",
+                        )
+                    )
+                    break
+
+            if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
+                if isinstance(stmt.value.func, ast.Name) and stmt.value.func.id == "print":
+                    if stmt.value.args and exception_detail_pattern.search(ast.unparse(stmt.value.args[0])):
+                        findings.append(
+                            _make_finding(
+                                "Stack Trace Exposure",
+                                "medium",
+                                rel_path,
+                                getattr(stmt, "lineno", 1),
+                                "Exception handler prints exception details or stack traces",
+                            )
+                        )
+                        break
+
+            if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
+                if logging_pattern.search(ast.unparse(stmt.value)) and "exc_info=True" in ast.unparse(stmt.value):
+                    findings.append(
+                        _make_finding(
+                            "Stack Trace Exposure",
+                            "medium",
+                            rel_path,
+                            getattr(stmt, "lineno", 1),
+                            "Exception handler logs with exc_info=True without sanitisation",
+                        )
+                    )
+                    break
+
+            if isinstance(stmt, ast.Raise):
+                if isinstance(stmt.exc, ast.Call) and isinstance(stmt.exc.func, ast.Name) and stmt.exc.func.id == "HTTPException":
+                    for kw in stmt.exc.keywords:
+                        if kw.arg == "detail" and kw.value is not None:
+                            if exception_detail_pattern.search(ast.unparse(kw.value)):
+                                findings.append(
+                                    _make_finding(
+                                        "Stack Trace Exposure",
+                                        "medium",
+                                        rel_path,
+                                        getattr(stmt, "lineno", 1),
+                                        "HTTPException detail includes exception details or stack traces",
+                                    )
+                                )
+                                break
+
+    return findings
+
+
 def analyze_file(file_path: str, root_dir: Optional[str] = None) -> List[Dict[str, object]]:
     findings: List[Dict[str, object]] = []
     with open(file_path, "r", encoding="utf-8") as handle:
@@ -203,6 +291,7 @@ def analyze_file(file_path: str, root_dir: Optional[str] = None) -> List[Dict[st
     rel_path = os.path.relpath(file_path, root_dir or os.getcwd())
     findings.extend(check_security_headers(source, file_path, root_dir))
     findings.extend(check_env_vars_in_source(source, file_path, root_dir))
+    findings.extend(check_stack_trace_exposure(source, file_path, root_dir))
 
     for node in ast.walk(tree):
         if isinstance(node, (ast.Assign, ast.AnnAssign)):
