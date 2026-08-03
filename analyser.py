@@ -45,16 +45,15 @@ def _is_route_function(node: ast.FunctionDef) -> bool:
 
 
 def _has_auth_dependency(node: ast.FunctionDef) -> bool:
-    for decorator in node.decorator_list:
-        for child in ast.walk(decorator):
-            if isinstance(child, ast.Call):
-                func = child.func
-                if isinstance(func, ast.Name) and func.id == "Depends":
-                    return True
-                if isinstance(func, ast.Attribute) and func.attr == "Depends":
-                    return True
-            if isinstance(child, ast.Name) and child.id == "Depends":
+    for child in ast.walk(node):
+        if isinstance(child, ast.Call):
+            func = child.func
+            if isinstance(func, ast.Name) and func.id == "Depends":
                 return True
+            if isinstance(func, ast.Attribute) and func.attr == "Depends":
+                return True
+        if isinstance(child, ast.Name) and child.id == "Depends":
+            return True
     return False
 
 
@@ -367,6 +366,60 @@ def check_insecure_token_storage(source: str, file_path: str, root_dir: Optional
     return findings
 
 
+def check_exposed_admin_endpoints(source: str, file_path: str, root_dir: Optional[str] = None) -> List[Dict[str, object]]:
+    findings: List[Dict[str, object]] = []
+    try:
+        tree = ast.parse(source, filename=file_path)
+    except SyntaxError:
+        return findings
+
+    rel_path = os.path.relpath(file_path, root_dir or os.getcwd())
+    path_markers = ("/admin", "/debug", "/internal", "/dev", "/test", "/console", "/manage", "/superuser", "/root")
+    function_markers = ("admin", "debug", "internal", "superuser", "manage", "console")
+
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if _has_auth_dependency(node):
+            continue
+
+        function_name = node.name.lower()
+        if not any(marker in function_name for marker in function_markers):
+            continue
+
+        path_value = None
+        for decorator in node.decorator_list:
+            if isinstance(decorator, ast.Call) and isinstance(decorator.func, ast.Attribute):
+                if decorator.func.attr.lower() in {"get", "post", "put", "delete", "patch", "route"}:
+                    if decorator.args:
+                        first_arg = decorator.args[0]
+                        if isinstance(first_arg, ast.Constant) and isinstance(first_arg.value, str):
+                            path_value = first_arg.value
+                            break
+            elif isinstance(decorator, ast.Attribute):
+                if decorator.attr.lower() in {"get", "post", "put", "delete", "patch", "route"}:
+                    continue
+            elif isinstance(decorator, ast.Name):
+                if decorator.id.lower() in {"get", "post", "put", "delete", "patch", "route"}:
+                    continue
+
+        if path_value is None:
+            path_value = ""
+
+        if any(marker in path_value.lower() for marker in path_markers):
+            findings.append(
+                _make_finding(
+                    "Exposed Admin Endpoint",
+                    "high",
+                    rel_path,
+                    getattr(node, "lineno", 1),
+                    "Route appears to expose admin or debug functionality without authentication",
+                )
+            )
+
+    return findings
+
+
 def analyze_file(file_path: str, root_dir: Optional[str] = None) -> List[Dict[str, object]]:
     findings: List[Dict[str, object]] = []
     with open(file_path, "r", encoding="utf-8") as handle:
@@ -382,6 +435,7 @@ def analyze_file(file_path: str, root_dir: Optional[str] = None) -> List[Dict[st
     findings.extend(check_env_vars_in_source(source, file_path, root_dir))
     findings.extend(check_stack_trace_exposure(source, file_path, root_dir))
     findings.extend(check_rate_limiting(source, file_path, root_dir))
+    findings.extend(check_exposed_admin_endpoints(source, file_path, root_dir))
 
     for node in ast.walk(tree):
         if isinstance(node, (ast.Assign, ast.AnnAssign)):
