@@ -204,8 +204,7 @@ def check_stack_trace_exposure(source: str, file_path: str, root_dir: Optional[s
         if not isinstance(node, ast.ExceptHandler):
             continue
 
-        handler_body = node.body
-        for stmt in handler_body:
+        for stmt in node.body:
             if isinstance(stmt, ast.Return):
                 if stmt.value is not None and isinstance(stmt.value, ast.Call):
                     if isinstance(stmt.value.func, ast.Name) and stmt.value.func.id in {"str", "repr"}:
@@ -278,6 +277,73 @@ def check_stack_trace_exposure(source: str, file_path: str, root_dir: Optional[s
     return findings
 
 
+def check_rate_limiting(source: str, file_path: str, root_dir: Optional[str] = None) -> List[Dict[str, object]]:
+    findings: List[Dict[str, object]] = []
+    try:
+        tree = ast.parse(source, filename=file_path)
+    except SyntaxError:
+        return findings
+
+    rel_path = os.path.relpath(file_path, root_dir or os.getcwd())
+    route_decorator_names = {"get", "post", "put", "delete", "patch", "route", "route"}
+    limiter_decorator_names = {"limit", "ratelimit"}
+    limiter_imports = {"slowapi", "flask_limiter", "fastapi_limiter"}
+    high_priority_routes = {"login", "register", "password", "reset", "payment", "checkout", "auth"}
+
+    imported_limiter = False
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name.split(".")[0] in limiter_imports:
+                    imported_limiter = True
+                    break
+        elif isinstance(node, ast.ImportFrom):
+            if node.module and node.module.split(".")[0] in limiter_imports:
+                imported_limiter = True
+
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if not _is_route_function(node):
+            continue
+
+        function_name = node.name.lower()
+        function_source = ast.get_source_segment(source, node) or ""
+        has_limiter = False
+
+        for decorator in node.decorator_list:
+            if isinstance(decorator, ast.Call):
+                func = decorator.func
+                if isinstance(func, ast.Attribute) and func.attr.lower() in limiter_decorator_names:
+                    has_limiter = True
+                    break
+                if isinstance(func, ast.Name) and func.id.lower() in limiter_decorator_names:
+                    has_limiter = True
+                    break
+            elif isinstance(decorator, ast.Attribute):
+                if decorator.attr.lower() in limiter_decorator_names:
+                    has_limiter = True
+                    break
+            elif isinstance(decorator, ast.Name):
+                if decorator.id.lower() in limiter_decorator_names:
+                    has_limiter = True
+                    break
+
+        if not has_limiter and not imported_limiter:
+            severity = "high" if any(term in function_name for term in high_priority_routes) else "medium"
+            findings.append(
+                _make_finding(
+                    "Missing Rate Limiting",
+                    severity,
+                    rel_path,
+                    getattr(node, "lineno", 1),
+                    "Route function has no visible rate limiting protection",
+                )
+            )
+
+    return findings
+
+
 def analyze_file(file_path: str, root_dir: Optional[str] = None) -> List[Dict[str, object]]:
     findings: List[Dict[str, object]] = []
     with open(file_path, "r", encoding="utf-8") as handle:
@@ -292,6 +358,7 @@ def analyze_file(file_path: str, root_dir: Optional[str] = None) -> List[Dict[st
     findings.extend(check_security_headers(source, file_path, root_dir))
     findings.extend(check_env_vars_in_source(source, file_path, root_dir))
     findings.extend(check_stack_trace_exposure(source, file_path, root_dir))
+    findings.extend(check_rate_limiting(source, file_path, root_dir))
 
     for node in ast.walk(tree):
         if isinstance(node, (ast.Assign, ast.AnnAssign)):
