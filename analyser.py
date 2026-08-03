@@ -555,6 +555,198 @@ def check_outdated_dependencies(source: str, file_path: str, root_dir: Optional[
     return findings
 
 
+def check_idor_risk(source: str, file_path: str, root_dir: Optional[str] = None) -> List[Dict[str, object]]:
+    findings: List[Dict[str, object]] = []
+    try:
+        tree = ast.parse(source, filename=file_path)
+    except SyntaxError:
+        return findings
+
+    rel_path = os.path.relpath(file_path, root_dir or os.getcwd())
+    ownership_markers = ("current_user", "user.id", "owner_id", "created_by", "request.user", "auth.user")
+
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if not _is_route_function(node):
+            continue
+
+        params = {arg.arg.lower() for arg in list(node.args.args) + list(node.args.kwonlyargs)}
+        if not any(marker in params for marker in {"id", "user_id", "record_id"}):
+            continue
+
+        function_source = ast.get_source_segment(source, node) or ""
+        if not re.search(r"(execute|query|select|filter|all|first|get)\s*\(", function_source, re.IGNORECASE):
+            continue
+        if re.search(r"(?:current_user|user\.id|request\.user|owner_id|created_by|auth\.user)", function_source, re.IGNORECASE):
+            continue
+
+        findings.append(
+            _make_finding(
+                "IDOR Risk",
+                "high",
+                rel_path,
+                getattr(node, "lineno", 1),
+                "Route accepts a user-controlled identifier and queries data without an ownership or permission check",
+            )
+        )
+
+    return findings
+
+
+def check_missing_2fa(source: str, file_path: str, root_dir: Optional[str] = None) -> List[Dict[str, object]]:
+    findings: List[Dict[str, object]] = []
+    try:
+        tree = ast.parse(source, filename=file_path)
+    except SyntaxError:
+        return findings
+
+    rel_path = os.path.relpath(file_path, root_dir or os.getcwd())
+    auth_markers = ("login", "signin", "authenticate", "auth")
+    two_fa_markers = ("otp", "totp", "mfa", "two_factor", "twilio", "pyotp")
+
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+
+        function_name = node.name.lower()
+        if not any(marker in function_name for marker in auth_markers):
+            continue
+
+        function_source = ast.get_source_segment(source, node) or ""
+        if any(marker in function_source.lower() for marker in two_fa_markers):
+            continue
+
+        findings.append(
+            _make_finding(
+                "Missing 2FA",
+                "medium",
+                rel_path,
+                getattr(node, "lineno", 1),
+                "Authentication function does not reference any two-factor authentication mechanism",
+            )
+        )
+
+    return findings
+
+
+def check_https_enforcement(source: str, file_path: str, root_dir: Optional[str] = None) -> List[Dict[str, object]]:
+    findings: List[Dict[str, object]] = []
+    rel_path = os.path.relpath(file_path, root_dir or os.getcwd())
+    lowered = source.lower()
+
+    https_indicators = ("sslredirect", "secure_ssl_redirect", "force_https", "https", "ssl", "tls")
+    if any(indicator in lowered for indicator in https_indicators):
+        return findings
+
+    if re.search(r"https?://(?!localhost|127\.0\.0\.1|0\.0\.0\.0)[^\s'\"]+", source, re.IGNORECASE):
+        findings.append(
+            _make_finding(
+                "Missing HTTPS Enforcement",
+                "medium",
+                rel_path,
+                1,
+                "Code references an insecure http:// URL outside localhost",
+            )
+        )
+        return findings
+
+    if re.search(r"(?:flask|fastapi)", source, re.IGNORECASE):
+        findings.append(
+            _make_finding(
+                "Missing HTTPS Enforcement",
+                "high",
+                rel_path,
+                1,
+                "Application does not appear to enforce HTTPS or redirect insecure traffic",
+            )
+        )
+
+    return findings
+
+
+def check_server_side_validation(source: str, file_path: str, root_dir: Optional[str] = None) -> List[Dict[str, object]]:
+    findings: List[Dict[str, object]] = []
+    try:
+        tree = ast.parse(source, filename=file_path)
+    except SyntaxError:
+        return findings
+
+    rel_path = os.path.relpath(file_path, root_dir or os.getcwd())
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if not _is_route_function(node):
+            continue
+
+        decorator_methods = set()
+        for decorator in node.decorator_list:
+            if isinstance(decorator, ast.Attribute) and isinstance(decorator.attr, str):
+                decorator_methods.add(decorator.attr.lower())
+            elif isinstance(decorator, ast.Call):
+                func = decorator.func
+                if isinstance(func, ast.Attribute) and isinstance(func.attr, str):
+                    decorator_methods.add(func.attr.lower())
+                elif isinstance(func, ast.Name) and isinstance(func.id, str):
+                    decorator_methods.add(func.id.lower())
+
+        if not decorator_methods.intersection({"post", "put", "patch", "delete"}):
+            continue
+
+        function_source = ast.get_source_segment(source, node) or ""
+        if not function_source:
+            continue
+
+        if re.search(r"\b(validate|validator|pydantic|schema|model)\b|raise\s+(?:HTTPException|ValueError)", function_source, re.IGNORECASE):
+            continue
+
+        if re.search(r"(?:request|payload|body|form|data)\b", function_source, re.IGNORECASE):
+            findings.append(
+                _make_finding(
+                    "Missing Server Side Validation",
+                    "medium",
+                    rel_path,
+                    getattr(node, "lineno", 1),
+                    "Route accepts request data without visible server-side validation or guard checks",
+                )
+            )
+
+    return findings
+
+
+def check_row_level_security(source: str, file_path: str, root_dir: Optional[str] = None) -> List[Dict[str, object]]:
+    findings: List[Dict[str, object]] = []
+    try:
+        tree = ast.parse(source, filename=file_path)
+    except SyntaxError:
+        return findings
+
+    rel_path = os.path.relpath(file_path, root_dir or os.getcwd())
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+
+        function_source = ast.get_source_segment(source, node) or ""
+        if not re.search(r"(execute|query|select|filter|all|first)\s*\(", function_source, re.IGNORECASE):
+            continue
+        if re.search(r"\b(where|filter|join|and|or)\b", function_source, re.IGNORECASE) and re.search(r"(?:user_id|owner_id|created_by|current_user|request\.user|account_id|tenant_id)", function_source, re.IGNORECASE):
+            continue
+        if re.search(r"\.all\(\)|\.first\(\)|\.get\(", function_source, re.IGNORECASE) and re.search(r"(?:user_id|owner_id|created_by|current_user|request\.user|account_id|tenant_id)", function_source, re.IGNORECASE):
+            continue
+
+        findings.append(
+            _make_finding(
+                "Row Level Security Missing",
+                "high",
+                rel_path,
+                getattr(node, "lineno", 1),
+                "Database access appears to fetch records without a user or owner-based access filter",
+            )
+        )
+
+    return findings
+
+
 def check_api_key_on_frontend(source: str, file_path: str, root_dir: Optional[str] = None) -> List[Dict[str, object]]:
     findings: List[Dict[str, object]] = []
     rel_path = os.path.relpath(file_path, root_dir or os.getcwd())
@@ -621,6 +813,11 @@ def analyze_file(file_path: str, root_dir: Optional[str] = None) -> List[Dict[st
     findings.extend(check_rate_limiting(source, file_path, root_dir))
     findings.extend(check_exposed_admin_endpoints(source, file_path, root_dir))
     findings.extend(check_file_upload_validation(source, file_path, root_dir))
+    findings.extend(check_idor_risk(source, file_path, root_dir))
+    findings.extend(check_missing_2fa(source, file_path, root_dir))
+    findings.extend(check_https_enforcement(source, file_path, root_dir))
+    findings.extend(check_server_side_validation(source, file_path, root_dir))
+    findings.extend(check_row_level_security(source, file_path, root_dir))
 
     for node in ast.walk(tree):
         if isinstance(node, (ast.Assign, ast.AnnAssign)):
