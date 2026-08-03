@@ -420,6 +420,66 @@ def check_exposed_admin_endpoints(source: str, file_path: str, root_dir: Optiona
     return findings
 
 
+def check_file_upload_validation(source: str, file_path: str, root_dir: Optional[str] = None) -> List[Dict[str, object]]:
+    findings: List[Dict[str, object]] = []
+    try:
+        tree = ast.parse(source, filename=file_path)
+    except SyntaxError:
+        return findings
+
+    rel_path = os.path.relpath(file_path, root_dir or os.getcwd())
+    upload_param_names = ("file", "upload", "attachment", "document", "image")
+    upload_annotation_names = ("UploadFile", "File")
+
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+
+        has_upload_param = False
+        upload_param_name = None
+        for arg in list(node.args.args) + list(node.args.kwonlyargs):
+            arg_name = arg.arg.lower()
+            if any(name in arg_name for name in upload_param_names):
+                has_upload_param = True
+                upload_param_name = arg_name
+                break
+            if arg.annotation is not None:
+                annotation_text = ast.unparse(arg.annotation)
+                if any(name in annotation_text for name in upload_annotation_names):
+                    has_upload_param = True
+                    upload_param_name = arg_name
+                    break
+
+        if not has_upload_param:
+            continue
+
+        function_source = ast.get_source_segment(source, node) or ""
+        has_extension_check = bool(re.search(r"(?:endswith|split\(|os\.path\.splitext|pathlib\.Path\(|suffix)", function_source, re.IGNORECASE))
+        has_content_type_check = bool(re.search(r"content[_-]?type|mime", function_source, re.IGNORECASE))
+        has_size_check = bool(re.search(r"size|length|bytes|filesize", function_source, re.IGNORECASE))
+
+        if not has_extension_check and not has_content_type_check and not has_size_check:
+            severity = "high"
+            detail = "Upload handler accepts files without any visible validation for extension, content type, or size"
+        elif has_extension_check + has_content_type_check + has_size_check == 1:
+            severity = "medium"
+            detail = "Upload handler performs partial validation but is missing one or more controls for extension, content type, or size"
+        else:
+            continue
+
+        findings.append(
+            _make_finding(
+                "Missing File Upload Validation",
+                severity,
+                rel_path,
+                getattr(node, "lineno", 1),
+                detail,
+            )
+        )
+
+    return findings
+
+
 def analyze_file(file_path: str, root_dir: Optional[str] = None) -> List[Dict[str, object]]:
     findings: List[Dict[str, object]] = []
     with open(file_path, "r", encoding="utf-8") as handle:
@@ -436,6 +496,7 @@ def analyze_file(file_path: str, root_dir: Optional[str] = None) -> List[Dict[st
     findings.extend(check_stack_trace_exposure(source, file_path, root_dir))
     findings.extend(check_rate_limiting(source, file_path, root_dir))
     findings.extend(check_exposed_admin_endpoints(source, file_path, root_dir))
+    findings.extend(check_file_upload_validation(source, file_path, root_dir))
 
     for node in ast.walk(tree):
         if isinstance(node, (ast.Assign, ast.AnnAssign)):
