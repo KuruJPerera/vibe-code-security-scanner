@@ -85,7 +85,6 @@ def check_security_headers(source: str, file_path: str, root_dir: Optional[str] 
         return findings
 
     rel_path = os.path.relpath(file_path, root_dir or os.getcwd())
-    header_names = ["x-content-type-options", "x-frame-options", "content-security-policy", "strict-transport-security"]
     response_return_pattern = re.compile(
         r"\breturn\b\s+(?:response|jsonresponse|htmlresponse|plaintextresponse|redirectresponse|streamingresponse|fileresponse|response\(|jsonresponse\(|htmlresponse\(|plaintextresponse\(|redirectresponse\(|streamingresponse\(|fileresponse\()",
         re.IGNORECASE,
@@ -122,6 +121,75 @@ def check_security_headers(source: str, file_path: str, root_dir: Optional[str] 
     return findings
 
 
+def check_env_vars_in_source(source: str, file_path: str, root_dir: Optional[str] = None) -> List[Dict[str, object]]:
+    findings: List[Dict[str, object]] = []
+    try:
+        tree = ast.parse(source, filename=file_path)
+    except SyntaxError:
+        return findings
+
+    rel_path = os.path.relpath(file_path, root_dir or os.getcwd())
+    env_var_pattern = re.compile(
+        r"(secret|key|password|token|api|auth|credential|database_url)",
+        re.IGNORECASE,
+    )
+    safe_load_pattern = re.compile(r"(os\.getenv|os\.environ|getenv|dotenv|load_dotenv)", re.IGNORECASE)
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign):
+            continue
+        if not node.targets:
+            continue
+
+        target_name = None
+        for target in node.targets:
+            if isinstance(target, ast.Name):
+                target_name = target.id
+                break
+            if isinstance(target, ast.Attribute):
+                target_name = target.attr
+                break
+
+        if not target_name:
+            continue
+
+        if safe_load_pattern.search(source):
+            # Allow obvious env-loading patterns to pass without reporting.
+            if isinstance(node.value, ast.Call) and (isinstance(node.value.func, ast.Attribute) and node.value.func.attr in {"getenv", "get"}) or (
+                isinstance(node.value, ast.Call) and isinstance(node.value.func, ast.Name) and node.value.func.id in {"getenv", "get"}
+            ):
+                continue
+
+        if not env_var_pattern.search(target_name):
+            continue
+
+        value = node.value
+        if isinstance(value, ast.Constant) and isinstance(value.value, str):
+            literal = value.value
+            if len(literal) > 8 and not literal.startswith("${"):
+                findings.append(
+                    _make_finding(
+                        "Environment Variable in Source",
+                        "high",
+                        rel_path,
+                        getattr(value, "lineno", 1),
+                        f"Sensitive value assigned directly to '{target_name}' instead of loading from environment or .env",
+                    )
+                )
+        elif isinstance(value, ast.JoinedStr):
+            findings.append(
+                _make_finding(
+                    "Environment Variable in Source",
+                    "high",
+                    rel_path,
+                    getattr(value, "lineno", 1),
+                    f"Sensitive value assigned directly to '{target_name}' instead of loading from environment or .env",
+                )
+            )
+
+    return findings
+
+
 def analyze_file(file_path: str, root_dir: Optional[str] = None) -> List[Dict[str, object]]:
     findings: List[Dict[str, object]] = []
     with open(file_path, "r", encoding="utf-8") as handle:
@@ -134,6 +202,7 @@ def analyze_file(file_path: str, root_dir: Optional[str] = None) -> List[Dict[st
 
     rel_path = os.path.relpath(file_path, root_dir or os.getcwd())
     findings.extend(check_security_headers(source, file_path, root_dir))
+    findings.extend(check_env_vars_in_source(source, file_path, root_dir))
 
     for node in ast.walk(tree):
         if isinstance(node, (ast.Assign, ast.AnnAssign)):
