@@ -77,6 +77,51 @@ def _looks_sensitive_response(value: ast.AST) -> bool:
     return False
 
 
+def check_security_headers(source: str, file_path: str, root_dir: Optional[str] = None) -> List[Dict[str, object]]:
+    findings: List[Dict[str, object]] = []
+    try:
+        tree = ast.parse(source, filename=file_path)
+    except SyntaxError:
+        return findings
+
+    rel_path = os.path.relpath(file_path, root_dir or os.getcwd())
+    header_names = ["x-content-type-options", "x-frame-options", "content-security-policy", "strict-transport-security"]
+    response_return_pattern = re.compile(
+        r"\breturn\b\s+(?:response|jsonresponse|htmlresponse|plaintextresponse|redirectresponse|streamingresponse|fileresponse|response\(|jsonresponse\(|htmlresponse\(|plaintextresponse\(|redirectresponse\(|streamingresponse\(|fileresponse\()",
+        re.IGNORECASE,
+    )
+    header_pattern = re.compile(
+        r"(?:response\.headers\s*\[|headers\s*=\s*\{|headers\s*\[|\b(?:x-content-type-options|x-frame-options|content-security-policy|strict-transport-security)\b)",
+        re.IGNORECASE,
+    )
+
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if not _is_route_function(node):
+            continue
+
+        function_source = ast.get_source_segment(source, node) or ""
+        if not function_source:
+            continue
+        if not response_return_pattern.search(function_source):
+            continue
+        if header_pattern.search(function_source):
+            continue
+
+        findings.append(
+            _make_finding(
+                "Missing Security Headers",
+                "medium",
+                rel_path,
+                getattr(node, "lineno", 1),
+                "Route returns a response without setting common security headers",
+            )
+        )
+
+    return findings
+
+
 def analyze_file(file_path: str, root_dir: Optional[str] = None) -> List[Dict[str, object]]:
     findings: List[Dict[str, object]] = []
     with open(file_path, "r", encoding="utf-8") as handle:
@@ -88,6 +133,7 @@ def analyze_file(file_path: str, root_dir: Optional[str] = None) -> List[Dict[st
         return findings
 
     rel_path = os.path.relpath(file_path, root_dir or os.getcwd())
+    findings.extend(check_security_headers(source, file_path, root_dir))
 
     for node in ast.walk(tree):
         if isinstance(node, (ast.Assign, ast.AnnAssign)):
