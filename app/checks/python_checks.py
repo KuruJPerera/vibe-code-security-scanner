@@ -742,6 +742,153 @@ def check_row_level_security(source: str, file_path: str, root_dir: Optional[str
     return findings
 
 
+def check_hardcoded_secret(source: str, file_path: str, root_dir: Optional[str] = None) -> List[Dict[str, object]]:
+    findings: List[Dict[str, object]] = []
+    try:
+        tree = ast.parse(source, filename=file_path)
+    except SyntaxError:
+        return findings
+
+    rel_path = os.path.relpath(file_path, root_dir or os.getcwd())
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Assign, ast.AnnAssign)):
+            value = node.value if isinstance(node, ast.Assign) else node.value
+            if value is None:
+                continue
+            if isinstance(value, ast.Constant) and isinstance(value.value, str):
+                target_name = None
+                if isinstance(node, ast.Assign):
+                    for target in node.targets:
+                        target_name = _get_name(target)
+                        if target_name:
+                            break
+                else:
+                    target_name = _get_name(node.target)
+
+                if target_name and (SECRET_PATTERN.search(target_name) or SECRET_PATTERN.search(value.value)):
+                    findings.append(
+                        _make_finding(
+                            "Hardcoded Secret",
+                            "high",
+                            rel_path,
+                            getattr(value, "lineno", 1),
+                            f"Potential hardcoded secret assigned to '{target_name}'",
+                        )
+                    )
+
+    return findings
+
+
+def check_sql_injection(source: str, file_path: str, root_dir: Optional[str] = None) -> List[Dict[str, object]]:
+    findings: List[Dict[str, object]] = []
+    try:
+        tree = ast.parse(source, filename=file_path)
+    except SyntaxError:
+        return findings
+
+    rel_path = os.path.relpath(file_path, root_dir or os.getcwd())
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            func = node.func
+            if isinstance(func, ast.Attribute) and func.attr in {"execute", "executemany"}:
+                if node.args:
+                    query_arg = node.args[0]
+                    if isinstance(query_arg, ast.BinOp) and isinstance(query_arg.op, ast.Mod):
+                        if isinstance(query_arg.left, ast.Constant) and isinstance(query_arg.left.value, str) and SQL_PATTERN.search(query_arg.left.value):
+                            findings.append(
+                                _make_finding(
+                                    "SQL Injection Risk",
+                                    "high",
+                                    rel_path,
+                                    getattr(query_arg, "lineno", 1),
+                                    "String formatting is used in a SQL query; prefer parameterized queries",
+                                )
+                            )
+                    elif isinstance(query_arg, ast.Call) and isinstance(query_arg.func, ast.Attribute) and query_arg.func.attr == "format":
+                        if isinstance(query_arg.func.value, ast.Constant) and isinstance(query_arg.func.value.value, str) and SQL_PATTERN.search(query_arg.func.value.value):
+                            findings.append(
+                                _make_finding(
+                                    "SQL Injection Risk",
+                                    "high",
+                                    rel_path,
+                                    getattr(query_arg, "lineno", 1),
+                                    "String formatting is used in a SQL query; prefer parameterized queries",
+                                )
+                            )
+
+    return findings
+
+
+def check_missing_authentication(source: str, file_path: str, root_dir: Optional[str] = None) -> List[Dict[str, object]]:
+    findings: List[Dict[str, object]] = []
+    try:
+        tree = ast.parse(source, filename=file_path)
+    except SyntaxError:
+        return findings
+
+    rel_path = os.path.relpath(file_path, root_dir or os.getcwd())
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if not _is_route_function(node):
+            continue
+        if _has_auth_dependency(node):
+            continue
+
+        findings.append(
+            _make_finding(
+                "Missing Authentication",
+                "high",
+                rel_path,
+                getattr(node, "lineno", 1),
+                "FastAPI route function has no authentication dependency",
+            )
+        )
+
+    return findings
+
+
+def check_debug_mode(source: str, file_path: str, root_dir: Optional[str] = None) -> List[Dict[str, object]]:
+    findings: List[Dict[str, object]] = []
+    try:
+        tree = ast.parse(source, filename=file_path)
+    except SyntaxError:
+        return findings
+
+    rel_path = os.path.relpath(file_path, root_dir or os.getcwd())
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            func = node.func
+            if isinstance(func, ast.Attribute) and func.attr == "run":
+                if any(
+                    isinstance(keyword, ast.keyword) and keyword.arg == "debug" and isinstance(keyword.value, ast.Constant) and keyword.value.value is True
+                    for keyword in node.keywords
+                ):
+                    findings.append(
+                        _make_finding(
+                            "Debug Mode Enabled",
+                            "medium",
+                            rel_path,
+                            getattr(node, "lineno", 1),
+                            "Application debug mode is enabled",
+                        )
+                    )
+
+        if isinstance(node, ast.Assign):
+            if isinstance(node.targets[0], ast.Name) and node.targets[0].id == "DEBUG" and isinstance(node.value, ast.Constant) and node.value.value is True:
+                findings.append(
+                    _make_finding(
+                        "Debug Mode Enabled",
+                        "medium",
+                        rel_path,
+                        getattr(node, "lineno", 1),
+                        "DEBUG flag is set to True",
+                    )
+                )
+
+    return findings
+
+
 def analyze_python_file(file_path: str, root_dir: Optional[str] = None) -> List[Dict[str, object]]:
     findings: List[Dict[str, object]] = []
     with open(file_path, "r", encoding="utf-8") as handle:
