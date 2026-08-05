@@ -1,283 +1,100 @@
-<!DOCTYPE html>
+<\!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Vibe Code Security Scanner</title>
-    <style>
-      :root {
-        color-scheme: dark;
-      }
-      body {
-        font-family: Arial, sans-serif;
-        margin: 0;
-        background: #0f172a;
-        color: #f8fafc;
-      }
-      .container {
-        max-width: 1200px;
-        margin: 0 auto;
-        padding: 2rem;
-      }
-      .panel {
-        background: #111827;
-        border: 1px solid #334155;
-        border-radius: 14px;
-        padding: 1.25rem;
-        margin-bottom: 1rem;
-      }
-      h1, h2, h3 {
-        margin-top: 0;
-      }
-      form {
-        display: flex;
-        gap: 0.75rem;
-        flex-wrap: wrap;
-      }
-      input {
-        flex: 1;
-        min-width: 280px;
-        padding: 0.8rem;
-        border-radius: 8px;
-        border: 1px solid #475569;
-        background: #020617;
-        color: #f8fafc;
-      }
-      button {
-        padding: 0.8rem 1rem;
-        border: none;
-        border-radius: 8px;
-        background: #2563eb;
-        color: white;
-        cursor: pointer;
-      }
-      button:disabled {
-        opacity: 0.6;
-        cursor: wait;
-      }
-      .stats {
-        display: flex;
-        gap: 1rem;
-        flex-wrap: wrap;
-        margin: 1rem 0;
-      }
-      .stat-box {
-        background: #1e293b;
-        padding: 0.75rem 1rem;
-        border-radius: 10px;
-        min-width: 140px;
-      }
-      .muted {
-        color: #94a3b8;
-        font-size: 0.95rem;
-      }
-      table {
-        width: 100%;
-        border-collapse: collapse;
-        margin-top: 0.75rem;
-      }
-      th, td {
-        padding: 0.75rem;
-        border-bottom: 1px solid #334155;
-        text-align: left;
-        vertical-align: top;
-      }
-      th {
-        background: #1e293b;
-      }
-      .severity {
-        font-weight: bold;
-        padding: 0.3rem 0.6rem;
-        border-radius: 999px;
-        display: inline-block;
-      }
-      .severity-high { background: #7f1d1d; color: #fecaca; }
-      .severity-medium { background: #78350f; color: #fde68a; }
-      .severity-low { background: #14532d; color: #bbf7d0; }
-      .history-list {
-        display: grid;
-        gap: 0.6rem;
-      }
-      .history-item {
-        background: #1e293b;
-        padding: 0.8rem 1rem;
-        border-radius: 10px;
-        cursor: pointer;
-        border: 1px solid transparent;
-      }
-      .history-item:hover {
-        border-color: #60a5fa;
-      }
-      .loading {
-        color: #fbbf24;
-        font-weight: bold;
-      }
-    </style>
-  </head>
-  <body>
-    <div class="container">
-      <div class="panel">
-        <h1>Vibe Code Security Scanner</h1>
-        <p class="muted">Enter a repository URL to scan it for common security issues.</p>
-        <form id="scanForm">
-          <input id="repoUrl" type="text" placeholder="https://github.com/example/repo.git" required />
-          <button type="submit" id="scanButton">Run Scan</button>
-        </form>
-        <div id="status" class="muted" style="margin-top: 0.75rem;">Ready to scan.</div>
-      </div>
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Vibe Code Security Scanner</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<link rel="stylesheet" href="/static/styles.css"/>
+</head>
+<body>
 
-      <div class="panel">
-        <div class="stats" id="summary"></div>
-        <div id="results"></div>
-      </div>
+<div class="topbar">
+  <div class="topbar-icon">🛡️</div>
+  <div>
+    <h1>Vibe Code Security Scanner</h1>
+    <p>Automated security analysis for AI-generated codebases</p>
+  </div>
+</div>
 
-      <div class="panel">
-        <h2>Scan History</h2>
-        <div id="history" class="history-list"></div>
+<div class="main">
+
+  <div class="scan-card">
+    <div class="scan-row">
+      <input id="repoUrl" type="text" placeholder="https://github.com/username/repository" />
+      <button class="scan-btn" id="scanBtn" onclick="runScan()">
+        <span>▶</span> Run Scan
+      </button>
+    </div>
+    <div class="status-bar">
+      <div class="spinner" id="spinner"></div>
+      <span id="statusText">Ready to scan.</span>
+    </div>
+  </div>
+
+  <div id="statsRow" class="grid4" style="display:none">
+    <div class="stat-card total"><div class="stat-label">Total findings</div><div class="stat-value" id="statTotal">0</div></div>
+    <div class="stat-card high"><div class="stat-label">High severity</div><div class="stat-value" id="statHigh">0</div></div>
+    <div class="stat-card med"><div class="stat-label">Medium severity</div><div class="stat-value" id="statMed">0</div></div>
+    <div class="stat-card low"><div class="stat-label">Low severity</div><div class="stat-value" id="statLow">0</div></div>
+  </div>
+
+  <div id="chartsRow" class="grid2" style="display:none">
+    <div class="panel">
+      <div class="panel-title">Severity breakdown</div>
+      <div class="chart-wrap"><canvas id="pieChart"></canvas></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Findings by check type</div>
+      <div class="chart-wrap"><canvas id="barChart"></canvas></div>
+    </div>
+  </div>
+
+  <div id="findingsPanel" class="panel" style="display:none">
+    <div class="section-header">
+      <div class="panel-title" style="margin:0">Findings <span class="count-badge" id="findingsCount">0</span></div>
+      <div class="filter-bar" id="filterBar">
+        <button class="filter-btn active" onclick="filterFindings('all',this)">All</button>
+        <button class="filter-btn" onclick="filterFindings('high',this)">High</button>
+        <button class="filter-btn" onclick="filterFindings('medium',this)">Medium</button>
+        <button class="filter-btn" onclick="filterFindings('low',this)">Low</button>
       </div>
     </div>
+    <div id="loadingOverlay" class="loading-overlay">
+      <div class="loading-ring"></div>
+      <span>Scanning repository...</span>
+    </div>
+    <div style="overflow-x:auto">
+      <table class="findings-table">
+        <thead>
+          <tr>
+            <th style="width:100px">Severity</th>
+            <th>Check</th>
+            <th style="width:180px">File</th>
+            <th style="width:60px">Line</th>
+            <th>Detail</th>
+          </tr>
+        </thead>
+        <tbody id="findingsBody"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="emptyState" style="display:none">No findings to display.</div>
+  </div>
 
-    <script>
-      const form = document.getElementById('scanForm');
-      const repoInput = document.getElementById('repoUrl');
-      const button = document.getElementById('scanButton');
-      const status = document.getElementById('status');
-      const summary = document.getElementById('summary');
-      const results = document.getElementById('results');
-      const history = document.getElementById('history');
+  <div class="remediation-panel" id="remediationPanel">
+    <div class="panel-title" style="margin-bottom:1rem">How to fix</div>
+    <div id="remediationList"></div>
+  </div>
 
-      async function loadHistory() {
-        try {
-          const response = await fetch('/scans');
-          const scans = await response.json();
-          history.innerHTML = '';
-          if (!Array.isArray(scans) || scans.length === 0) {
-            history.innerHTML = '<div class="muted">No scans yet.</div>';
-            return;
-          }
-          scans.forEach((scan) => {
-            const item = document.createElement('div');
-            item.className = 'history-item';
-            item.innerHTML = `
-              <strong>${scan.repo_url}</strong><br />
-              <span class="muted">${scan.timestamp}</span><br />
-              <span>${scan.total_findings} findings · vulnerability rate ${scan.vulnerability_rate}%</span>
-            `;
-            item.addEventListener('click', () => loadFindings(scan.id));
-            history.appendChild(item);
-          });
-        } catch (error) {
-          history.innerHTML = '<div class="muted">Unable to load scan history.</div>';
-        }
-      }
+  <div class="panel">
+    <div class="panel-title">Scan history</div>
+    <div class="history-list" id="historyList">
+      <div class="empty">No previous scans.</div>
+    </div>
+  </div>
 
-      async function loadFindings(scanId) {
-        status.textContent = `Loading findings for scan ${scanId}...`;
-        try {
-          const response = await fetch(`/scans/${scanId}`);
-          const findings = await response.json();
-          renderFindings(findings);
-          status.textContent = `Showing findings for scan ${scanId}.`;
-        } catch (error) {
-          status.textContent = 'Unable to load findings.';
-        }
-      }
+</div>
 
-      function renderFindings(findings) {
-        if (!Array.isArray(findings) || findings.length === 0) {
-          results.innerHTML = '<div class="muted">No findings to display.</div>';
-          summary.innerHTML = '';
-          return;
-        }
-
-        const totalFindings = findings.length;
-        const highCount = findings.filter((item) => item.severity && item.severity.toLowerCase() === 'high').length;
-        const mediumCount = findings.filter((item) => item.severity && item.severity.toLowerCase() === 'medium').length;
-        const lowCount = findings.filter((item) => item.severity && item.severity.toLowerCase() === 'low').length;
-
-        summary.innerHTML = `
-          <div class="stat-box"><strong>${totalFindings}</strong><br /><span class="muted">total findings</span></div>
-          <div class="stat-box"><strong>${highCount}</strong><br /><span class="muted">high severity</span></div>
-          <div class="stat-box"><strong>${mediumCount}</strong><br /><span class="muted">medium severity</span></div>
-          <div class="stat-box"><strong>${lowCount}</strong><br /><span class="muted">low severity</span></div>
-        `;
-
-        const rows = findings.map((finding) => {
-          const severityClass = `severity-${(finding.severity || 'low').toLowerCase()}`;
-          return `
-            <tr>
-              <td><span class="severity ${severityClass}">${finding.severity || 'Low'}</span></td>
-              <td>${finding.check_name || 'Unknown'}</td>
-              <td>${finding.file_path || '-'}</td>
-              <td>${finding.line_number || '-'}</td>
-              <td>${finding.detail || '-'}</td>
-            </tr>
-          `;
-        }).join('');
-
-        results.innerHTML = `
-          <table>
-            <thead>
-              <tr>
-                <th>Severity</th>
-                <th>Check Name</th>
-                <th>File Path</th>
-                <th>Line Number</th>
-                <th>Detail</th>
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>
-        `;
-      }
-
-      form.addEventListener('submit', async (event) => {
-        event.preventDefault();
-        const repoUrl = repoInput.value.trim();
-        if (!repoUrl) {
-          status.textContent = 'Please enter a repository URL.';
-          return;
-        }
-
-        button.disabled = true;
-        button.textContent = 'Scanning...';
-        status.className = 'loading';
-        status.textContent = 'Scanning repository...';
-        summary.innerHTML = '';
-        results.innerHTML = '<div class="muted">Running scan...</div>';
-
-        try {
-          const response = await fetch('/scan', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ repo_url: repoUrl })
-          });
-          const data = await response.json();
-          if (!response.ok) {
-            throw new Error(data.detail || 'Scan failed');
-          }
-
-          const totalFindings = data.total_findings ?? 0;
-          const vulnerabilityRate = data.vulnerability_rate ?? 0;
-          summary.innerHTML = `
-            <div class="stat-box"><strong>${totalFindings}</strong><br /><span class="muted">total findings</span></div>
-            <div class="stat-box"><strong>${vulnerabilityRate}%</strong><br /><span class="muted">vulnerability rate</span></div>
-          `;
-          renderFindings(data.findings || []);
-          status.className = 'muted';
-          status.textContent = `Scan complete for ${repoUrl}.`;
-          await loadHistory();
-        } catch (error) {
-          status.className = 'muted';
-          status.textContent = error.message;
-          results.innerHTML = '<div class="muted">No results available.</div>';
-        } finally {
-          button.disabled = false;
-          button.textContent = 'Run Scan';
-        }
-      });
-
-      loadHistory();
-    </script>
-  </body>
+<script src="/static/app.js"></script>
+</body>
 </html>
