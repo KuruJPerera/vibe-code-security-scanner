@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Results — Vibe Code Security Scanner</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#faf8f5;font-family:-apple-system,'Helvetica Neue',Helvetica,Arial,sans-serif;color:#1c1a17}
+a{color:#0a5c36;text-decoration:none}
+a:hover{color:#073d24}
+.topbar{background:#fff;border-bottom:1px solid #e6e1d8;padding:18px 48px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+.logo{width:28px;height:28px;background:#0a5c36;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff}
+.topbar-left{display:flex;align-items:center;gap:12px}
+.topbar-title{font-size:15px;font-weight:600;letter-spacing:-0.01em}
+.topbar-sub{font-size:12px;color:#9a9287;border-left:1px solid #e6e1d8;padding-left:12px}
+.btn-new{display:inline-flex;align-items:center;gap:8px;background:#f1efe9;color:#1c1a17;font-size:13px;font-weight:500;padding:8px 16px;border-radius:3px;border:1px solid #d8d2c6;cursor:pointer;text-decoration:none}
+.btn-new:hover{border-color:#0a5c36;color:#0a5c36}
+.layout{display:flex;min-height:calc(100vh - 65px)}
+.sidebar{width:230px;flex-shrink:0;background:#fff;border-right:1px solid #e6e1d8;padding:20px 0}
+.sb-section{padding:0 20px;margin-bottom:18px}
+.sb-label{font-size:11px;font-weight:600;color:#9a9287;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
+.sb-item{font-size:13px;color:#6b6459;padding:6px 8px;border-radius:3px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;transition:all .1s}
+.sb-item:hover{background:#f1efe9;color:#1c1a17}
+.sb-item.active{background:#f1efe9;color:#1c1a17;font-weight:500}
+.sb-count{font-size:11px;background:#f1efe9;padding:1px 7px;border-radius:99px;color:#6b6459}
+.sb-count-high{background:#fbeae8;color:#b3261e}
+.sb-count-med{background:#fbf0dc;color:#8a5a00}
+.sb-count-low{background:#e8f2ec;color:#2f7d4f}
+.sb-divider{border:none;border-top:1px solid #e6e1d8;margin:14px 0}
+.sb-history-item{font-size:12px;color:#6b6459;padding:5px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
+.sb-history-item:hover{color:#0a5c36}
+.main{flex:1;padding:32px 40px;max-width:1000px}
+.summary-card{background:#fff;border:1px solid #e6e1d8;border-radius:4px;padding:18px 22px;margin-bottom:24px}
+.summary-title{font-size:13px;font-weight:600;margin-bottom:6px}
+.summary-text{font-size:13px;color:#6b6459;line-height:1.6}
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px}
+.stat-card{background:#fff;border:1px solid #e6e1d8;border-radius:4px;padding:16px 18px}
+.stat-num{font-size:26px;font-weight:700;color:#1c1a17}
+.stat-num.s-high{color:#b3261e}
+.stat-num.s-med{color:#8a5a00}
+.stat-num.s-low{color:#2f7d4f}
+.stat-label{font-size:12px;color:#6b6459;margin-top:2px}
+.breakdown-card{background:#fff;border:1px solid #e6e1d8;border-radius:4px;padding:20px 22px;margin-bottom:24px}
+.card-label{font-size:11px;font-weight:600;color:#9a9287;text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px}
+.bar-track{display:flex;height:10px;border-radius:99px;overflow:hidden;margin-bottom:10px;background:#f1efe9}
+.bar-high{background:#b3261e;height:100%}
+.bar-med{background:#8a5a00;height:100%}
+.bar-low{background:#2f7d4f;height:100%}
+.bar-legend{display:flex;gap:18px;font-size:12px;color:#6b6459}
+.legend-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px}
+.charts-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:24px}
+.chart-card{background:#fff;border:1px solid #e6e1d8;border-radius:4px;padding:20px 22px}
+.chart-wrap{position:relative;height:160px;margin-top:12px}
+.section-divider{display:flex;align-items:center;gap:12px;margin:32px 0 16px}
+.section-label{font-size:11px;font-weight:600;color:#6b6459;text-transform:uppercase;letter-spacing:.07em;white-space:nowrap}
+.divider-line{flex:1;border:none;border-top:1px solid #e6e1d8}
+.finding-card{background:#fff;border:1px solid #e6e1d8;border-radius:3px;padding:14px 18px;margin-bottom:10px;border-left-width:3px}
+.finding-card.sev-high{border-left-color:#b3261e}
+.finding-card.sev-medium{border-left-color:#8a5a00}
+.finding-card.sev-low{border-left-color:#2f7d4f}
+.finding-top{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:6px}
+.finding-name{font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:8px}
+.finding-name:hover{color:#0a5c36}
+.finding-loc{font-size:12px;color:#9a9287;font-family:'SFMono-Regular',Menlo,Consolas,monospace;white-space:nowrap;flex-shrink:0}
+.finding-detail{font-size:13px;color:#6b6459;line-height:1.6;margin-bottom:8px}
+.finding-body{display:none}
+.finding-body.open{display:block}
+.fix-label{font-size:11px;font-weight:600;color:#9a9287;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;margin-top:10px}
+.fix-text{font-size:13px;color:#4a453d;line-height:1.6;margin-bottom:8px}
+.code-block{background:#faf8f5;border:1px solid #e6e1d8;border-radius:3px;padding:10px 14px;font-family:'SFMono-Regular',Menlo,Consolas,monospace;font-size:12px;color:#1c1a17;white-space:pre-wrap;line-height:1.6;margin-top:6px}
+.sev-badge{display:inline-flex;align-items:center;font-size:11px;font-weight:600;padding:2px 8px;border-radius:99px}
+.sev-high{background:#fbeae8;color:#b3261e}
+.sev-medium{background:#fbf0dc;color:#8a5a00}
+.sev-low{background:#e8f2ec;color:#2f7d4f}
+.owasp-tag{font-size:11px;background:#f1efe9;border:1px solid #e6e1d8;color:#6b6459;padding:1px 7px;border-radius:99px}
+.toggle{font-size:11px;color:#9a9287;margin-left:6px;transition:transform .15s;display:inline-block}
+.toggle.open{transform:rotate(180deg)}
+.remed-panel{background:#fff;border:1px solid #e6e1d8;border-radius:4px;margin-bottom:24px;display:none}
+.remed-header{padding:14px 22px;border-bottom:1px solid #e6e1d8;font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px}
+.remed-item{border-bottom:1px solid #e6e1d8;padding:14px 22px}
+.remed-item:last-child{border-bottom:none}
+.remed-check{font-size:13px;font-weight:600;margin-bottom:4px;display:flex;align-items:center;gap:8px}
+.remed-fix{font-size:13px;color:#6b6459;line-height:1.6;margin-bottom:8px}
+.remed-code{background:#faf8f5;border:1px solid #e6e1d8;border-radius:3px;padding:10px 14px;font-family:'SFMono-Regular',Menlo,Consolas,monospace;font-size:12px;color:#1c1a17;white-space:pre-wrap;line-height:1.6}
+.history-panel{background:#fff;border:1px solid #e6e1d8;border-radius:4px;margin-bottom:24px}
+.history-header{padding:14px 22px;border-bottom:1px solid #e6e1d8;font-size:13px;font-weight:600}
+.history-item{display:flex;align-items:center;justify-content:space-between;padding:10px 22px;border-bottom:1px solid #e6e1d8;cursor:pointer;transition:background .1s}
+.history-item:last-child{border-bottom:none}
+.history-item:hover{background:#f1efe9}
+.history-url{font-size:13px;color:#0a5c36;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:70%}
+.history-meta{font-size:11px;color:#9a9287;margin-top:2px}
+.history-badge{font-size:11px;background:#f1efe9;color:#6b6459;padding:2px 8px;border-radius:99px;flex-shrink:0}
+.empty{font-size:13px;color:#9a9287;padding:16px 0}
+.loading{padding:48px;text-align:center;color:#9a9287;font-size:14px}
+@media(max-width:768px){
+  .sidebar{display:none}
+  .stats-grid{grid-template-columns:repeat(2,1fr)}
+  .charts-row{grid-template-columns:1fr}
+  .main{padding:20px}
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="logo">VS</div>
+    <span class="topbar-title">Vibe Code Security Scanner</span>
+    <span class="topbar-sub">results</span>
+  </div>
+  <a href="/scanner" class="btn-new">New scan</a>
+</div>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sb-section">
+      <div class="sb-label">Findings</div>
+      <div class="sb-item active" id="sb-all" onclick="filterFindings('all',this)">All <span class="sb-count" id="sb-count-all">0</span></div>
+      <div class="sb-item" id="sb-high" onclick="filterFindings('high',this)">High <span class="sb-count sb-count-high" id="sb-count-high">0</span></div>
+      <div class="sb-item" id="sb-medium" onclick="filterFindings('medium',this)">Medium <span class="sb-count sb-count-med" id="sb-count-medium">0</span></div>
+      <div class="sb-item" id="sb-low" onclick="filterFindings('low',this)">Low <span class="sb-count sb-count-low" id="sb-count-low">0</span></div>
+    </div>
+    <hr class="sb-divider"/>
+    <div class="sb-section">
+      <div class="sb-label">Jump to</div>
+      <div class="sb-item" onclick="jumpTo('backend-section')">Backend issues</div>
+      <div class="sb-item" onclick="jumpTo('frontend-section')">Frontend issues</div>
+      <div class="sb-item" onclick="jumpTo('backend-remed')">Backend fixes</div>
+      <div class="sb-item" onclick="jumpTo('frontend-remed')">Frontend fixes</div>
+      <div class="sb-item" onclick="jumpTo('chartsRow')">Charts</div>
+    </div>
+    <hr class="sb-divider"/>
+    <div class="sb-section">
+      <div class="sb-label">Past scans</div>
+      <div id="historySidebar"></div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div id="loadingState" class="loading">Loading results...</div>
+    <div id="resultsContent" style="display:none">
+
+      <div class="summary-card">
+        <div class="summary-title">Scan summary</div>
+        <div class="summary-text" id="summaryText">Loading...</div>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-num" id="statTotal">0</div><div class="stat-label">Total findings</div></div>
+        <div class="stat-card"><div class="stat-num s-high" id="statHigh">0</div><div class="stat-label">High severity</div></div>
+        <div class="stat-card"><div class="stat-num s-med" id="statMed">0</div><div class="stat-label">Medium severity</div></div>
+        <div class="stat-card"><div class="stat-num s-low" id="statLow">0</div><div class="stat-label">Low severity</div></div>
+      </div>
+
+      <div class="breakdown-card">
+        <div class="card-label">Severity breakdown</div>
+        <div class="bar-track"><div class="bar-high" id="barHigh"></div><div class="bar-med" id="barMed"></div><div class="bar-low" id="barLow"></div></div>
+        <div class="bar-legend">
+          <span><span class="legend-dot" style="background:#b3261e"></span>High</span>
+          <span><span class="legend-dot" style="background:#8a5a00"></span>Medium</span>
+          <span><span class="legend-dot" style="background:#2f7d4f"></span>Low</span>
+        </div>
+      </div>
+
+      <div class="charts-row" id="chartsRow">
+        <div class="chart-card">
+          <div class="card-label">Severity breakdown</div>
+          <div class="chart-wrap"><canvas id="pieChart"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="card-label">Top check categories</div>
+          <div class="chart-wrap"><canvas id="barChart"></canvas></div>
+        </div>
+      </div>
+
+      <!-- BACKEND -->
+      <div id="backend-section">
+        <div class="section-divider">
+          <span class="section-label">⚙️ Backend — Python</span>
+          <hr class="divider-line"/>
+          <span style="font-size:11px;color:#9a9287" id="backend-count">0 findings</span>
+        </div>
+        <div id="backendList"></div>
+      </div>
+
+      <div class="remed-panel" id="backend-remed">
+        <div class="remed-header">🔧 How to fix — Backend</div>
+        <div id="backendRemedList"></div>
+      </div>
+
+      <!-- FRONTEND -->
+      <div id="frontend-section">
+        <div class="section-divider">
+          <span class="section-label">🌐 Frontend — HTML / JavaScript</span>
+          <hr class="divider-line"/>
+          <span style="font-size:11px;color:#9a9287" id="frontend-count">0 findings</span>
+        </div>
+        <div id="frontendList"></div>
+      </div>
+
+      <div class="remed-panel" id="frontend-remed">
+        <div class="remed-header">🔧 How to fix — Frontend</div>
+        <div id="frontendRemedList"></div>
+      </div>
+
+      <!-- HISTORY -->
+      <div class="history-panel" id="historySection">
+        <div class="history-header">Scan history</div>
+        <div id="historyList"><div class="empty" style="padding:16px 22px">No previous scans.</div></div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<script>
+const params = new URLSearchParams(window.location.search);
+const scanId = params.get('scan_id');
+let allFindings = [];
+let pieChart = null;
+let barChart = null;
+
+const OWASP_MAP = {
+  "Hardcoded Secret":"A02","SQL Injection Risk":"A03","Missing Authentication":"A07",
+  "Debug Mode Enabled":"A05","Missing Input Validation":"A03","Sensitive Data in Response":"A02",
+  "Stack Trace Exposure":"A05","Environment Variable in Source":"A02","Missing Rate Limiting":"A04",
+  "Missing Security Headers":"A05","Exposed Admin Endpoint":"A01","IDOR Risk":"A01",
+  "Missing File Upload Validation":"A04","Row Level Security Missing":"A01",
+  "Missing HTTPS Enforcement":"A02","Missing 2FA":"A07","Missing Server Side Validation":"A03",
+  "Outdated Dependency":"A06","API Key Exposed on Frontend":"A02","Insecure Token Storage":"A02"
+};
+
+const REMEDIATIONS = {
+  "Hardcoded Secret":{sev:"high",fix:"Move the value to a .env file and load it with os.getenv(). Never commit credentials to version control.",code:"# Bad\nAPI_KEY = 'sk-abc123'\n\n# Good\nimport os\nfrom dotenv import load_dotenv\nload_dotenv()\nAPI_KEY = os.getenv('API_KEY')"},
+  "SQL Injection Risk":{sev:"high",fix:"Use parameterised queries. Pass values as a tuple to cursor.execute().",code:"# Bad\ncursor.execute(\"SELECT * FROM users WHERE id = %s\" % user_id)\n\n# Good\ncursor.execute('SELECT * FROM users WHERE id = ?', (user_id,))"},
+  "Missing Authentication":{sev:"high",fix:"Add a Depends() call to the route function referencing your auth dependency.",code:"from fastapi import Depends\n\n@app.get('/secure')\ndef route(user = Depends(get_current_user)):\n    return {'ok': True}"},
+  "Debug Mode Enabled":{sev:"medium",fix:"Never hardcode debug=True. Use an environment variable.",code:"import os\nDEBUG = os.getenv('DEBUG','false').lower()=='true'\napp.run(debug=DEBUG)"},
+  "Missing Input Validation":{sev:"medium",fix:"Add type hints to all parameters. Use Pydantic models for request bodies.",code:"from pydantic import BaseModel\n\nclass Request(BaseModel):\n    repo_url: str"},
+  "Sensitive Data in Response":{sev:"high",fix:"Use a response schema that explicitly excludes sensitive fields.",code:"class UserResponse(BaseModel):\n    id: int\n    email: str\n    # password deliberately excluded"},
+  "Stack Trace Exposure":{sev:"medium",fix:"Return a generic error message. Log exceptions server-side only.",code:"except Exception as e:\n    logger.exception(e)\n    raise HTTPException(500, 'Internal server error')"},
+  "Environment Variable in Source":{sev:"high",fix:"Add values to a .env file and load with os.getenv().",code:"# .env\nSECRET_KEY=your-secret\n\n# Python\nSECRET_KEY = os.getenv('SECRET_KEY')"},
+  "Missing Rate Limiting":{sev:"medium",fix:"Add rate limiting using slowapi. Login endpoints need this most urgently.",code:"from slowapi import Limiter\nlimiter = Limiter(key_func=get_remote_address)\n\n@app.post('/login')\n@limiter.limit('5/minute')\ndef login(request: Request): ..."},
+  "Missing Security Headers":{sev:"medium",fix:"Set X-Frame-Options, X-Content-Type-Options, CSP, and HSTS headers.",code:"@app.middleware('http')\nasync def add_headers(request, call_next):\n    response = await call_next(request)\n    response.headers['X-Frame-Options'] = 'DENY'\n    return response"},
+  "Exposed Admin Endpoint":{sev:"high",fix:"Add authentication to all admin routes. Remove debug endpoints in production.",code:"@app.get('/admin')\ndef admin(user = Depends(require_admin)):\n    ..."},
+  "IDOR Risk":{sev:"high",fix:"Verify ownership before returning any record fetched by user-controlled ID.",code:"record = db.get_record(record_id)\nif record.owner_id != current_user.id:\n    raise HTTPException(403, 'Forbidden')"},
+  "Missing File Upload Validation":{sev:"high",fix:"Check extension, content-type, and file size before processing uploads.",code:"ALLOWED = {'.jpg','.png','.pdf'}\next = os.path.splitext(file.filename)[1].lower()\nif ext not in ALLOWED:\n    raise HTTPException(400, 'File type not allowed')"},
+  "Row Level Security Missing":{sev:"high",fix:"Filter all queries by the current user's ID.",code:"rows = db.execute('SELECT * FROM orders WHERE user_id = ?',(user.id,)).fetchall()"},
+  "Missing HTTPS Enforcement":{sev:"high",fix:"Add HTTPSRedirectMiddleware to your FastAPI app.",code:"from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware\napp.add_middleware(HTTPSRedirectMiddleware)"},
+  "Missing 2FA":{sev:"medium",fix:"Implement TOTP using pyotp. Require OTP at login.",code:"import pyotp\ntotp = pyotp.TOTP(user.totp_secret)\nif not totp.verify(otp_code):\n    raise HTTPException(401,'Invalid OTP')"},
+  "Missing Server Side Validation":{sev:"medium",fix:"Validate all incoming data server-side regardless of client validation.",code:"from pydantic import validator\n\n@validator('age')\ndef positive(cls,v):\n    if v<0: raise ValueError('Must be positive')\n    return v"},
+  "Outdated Dependency":{sev:"medium",fix:"Update to the latest stable version and test for breaking changes.",code:"pip install --upgrade flask\npip freeze > requirements.txt"},
+  "API Key Exposed on Frontend":{sev:"high",fix:"Never put API keys in frontend code. Move all API calls to your backend.",code:"// Bad\nconst apiKey = 'sk-abc123';\n\n// Good\nconst res = await fetch('/api/data');"},
+  "Insecure Token Storage":{sev:"high",fix:"Store tokens in httpOnly cookies — not localStorage.",code:"// Bad\nlocalStorage.setItem('token', token);\n\n// Good\nresponse.set_cookie('token', value, httponly=True, secure=True)"}
+};
+
+function isFrontend(f){ const fp=(f.file_path||''); return fp.endsWith('.html')||fp.endsWith('.js'); }
+function isBackend(f){ return !isFrontend(f); }
+function sevColor(sev){ const s=(sev||'').toLowerCase(); return s==='high'?'#b3261e':s==='medium'?'#8a5a00':'#2f7d4f'; }
+function sevClass(sev){ const s=(sev||'').toLowerCase(); return s==='high'?'sev-high':s==='medium'?'sev-medium':'sev-low'; }
+function jumpTo(id){ document.getElementById(id)?.scrollIntoView({behavior:'smooth'}); }
+
+function filterFindings(filter, btn){
+  document.querySelectorAll('.sb-item[id^="sb-"]').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  const bf = filter==='all'?allFindings.filter(isBackend):allFindings.filter(f=>isBackend(f)&&(f.severity||'').toLowerCase()===filter);
+  const ff = filter==='all'?allFindings.filter(isFrontend):allFindings.filter(f=>isFrontend(f)&&(f.severity||'').toLowerCase()===filter);
+  renderCards(bf,'backendList');
+  renderCards(ff,'frontendList');
+}
+
+function renderCards(findings, containerId){
+  const el = document.getElementById(containerId);
+  if(!findings.length){ el.innerHTML='<div class="empty">No findings in this category.</div>'; return; }
+  el.innerHTML = findings.map((f,i)=>{
+    const sev=(f.severity||'').toLowerCase();
+    const file=(f.file_path||'').split('/').pop();
+    const remed=REMEDIATIONS[f.check_name];
+    const owasp=OWASP_MAP[f.check_name]?`<span class="owasp-tag">OWASP ${OWASP_MAP[f.check_name]}</span>`:'';
+    const uid=containerId+i;
+    const findingData=JSON.stringify({check_name:f.check_name,severity:f.severity,file_path:f.file_path,line_number:f.line_number,detail:f.detail}).replace(/"/g,'&quot;');
+    return `<div class="finding-card sev-${sev==='medium'?'medium':sev}">
+      <div class="finding-top">
+        <div class="finding-name" onclick="toggleCard('${uid}',JSON.parse(this.dataset.f))" data-f="${findingData}">
+          <span class="sev-badge sev-${sev==='medium'?'medium':sev}">${(f.severity||'').toUpperCase()}</span>
+          ${f.check_name||'Unknown'}
+          ${owasp}
+          <span class="toggle" id="toggle-${uid}">▼</span>
+        </div>
+        <div class="finding-loc">${file}:${f.line_number||'?'}</div>
+      </div>
+      <div class="finding-detail">${f.detail||''}</div>
+      <div class="finding-body" id="body-${uid}"></div>
+    </div>`;
+  }).join('');
+}
+
+async function toggleCard(uid, finding){
+  const body=document.getElementById('body-'+uid);
+  const toggle=document.getElementById('toggle-'+uid);
+  const isOpen=body.classList.contains('open');
+  if(!isOpen && !body.dataset.loaded){
+    body.innerHTML='<div style="font-size:13px;color:#9a9287;padding:8px 0">Generating fix...</div>';
+    body.classList.add('open');
+    toggle.classList.add('open');
+    try {
+      const res=await fetch('/remediate',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(finding)
+      });
+      const data=await res.json();
+      body.innerHTML=`<div class="fix-label">How to fix</div><div class="fix-text" style="white-space:pre-wrap">${data.remediation}</div>`;
+      body.dataset.loaded='1';
+    } catch(e){
+      body.innerHTML='<div class="fix-text">Unable to load remediation.</div>';
+    }
+  } else {
+    body.classList.toggle('open',!isOpen);
+    toggle.classList.toggle('open',!isOpen);
+  }
+}
+
+async function renderRemedPanel(findings, panelId, listId){
+  const panel=document.getElementById(panelId);
+  const list=document.getElementById(listId);
+  const seen=new Set();
+  const unique=[];
+  findings.forEach(f=>{
+    if(!seen.has(f.check_name)){
+      seen.add(f.check_name);
+      unique.push(f);
+    }
+  });
+  if(!unique.length){panel.style.display='none';return;}
+  panel.style.display='block';
+  list.innerHTML=unique.map(f=>{
+    const sev=(f.severity||'').toLowerCase();
+    return `<div class="remed-item" id="remed-${panelId}-${f.check_name.replace(/\s/g,'-')}">
+      <div class="remed-check">
+        <span class="sev-badge sev-${sev==='medium'?'medium':sev}">${(f.severity||'').toUpperCase()}</span>
+        ${f.check_name}
+      </div>
+      <div class="remed-fix" id="rfix-${panelId}-${f.check_name.replace(/\s/g,'-')}">
+        <span style="color:#9a9287;font-size:12px">Generating fix...</span>
+      </div>
+    </div>`;
+  }).join('');
+  for(const f of unique){
+    const fixId='rfix-'+panelId+'-'+f.check_name.replace(/\s/g,'-');
+    try {
+      const res=await fetch('/remediate',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({check_name:f.check_name,severity:f.severity,file_path:f.file_path,line_number:f.line_number,detail:f.detail})
+      });
+      const data=await res.json();
+      const el=document.getElementById(fixId);
+      if(el) el.innerHTML=`<span style="white-space:pre-wrap">${data.remediation}</span>`;
+    } catch(e){
+      const el=document.getElementById(fixId);
+      if(el) el.textContent='Unable to load remediation.';
+    }
+  }
+}
+
+function renderCharts(findings){
+  const high=findings.filter(f=>(f.severity||'').toLowerCase()==='high').length;
+  const med=findings.filter(f=>(f.severity||'').toLowerCase()==='medium').length;
+  const low=findings.filter(f=>(f.severity||'').toLowerCase()==='low').length;
+  const total=findings.length||1;
+  document.getElementById('barHigh').style.width=(high/total*100)+'%';
+  document.getElementById('barMed').style.width=(med/total*100)+'%';
+  document.getElementById('barLow').style.width=(low/total*100)+'%';
+  if(pieChart) pieChart.destroy();
+  pieChart=new Chart(document.getElementById('pieChart'),{
+    type:'doughnut',
+    data:{labels:['High','Medium','Low'],datasets:[{data:[high,med,low],backgroundColor:['#b3261e','#8a5a00','#2f7d4f'],borderWidth:0,hoverOffset:3}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{color:'#6b6459',font:{size:12},padding:12,boxWidth:10}}}}
+  });
+  const counts={};
+  findings.forEach(f=>{
+    const n=(f.check_name||'Unknown').replace('Missing ','').replace(' Risk','').replace(' Enabled','');
+    counts[n]=(counts[n]||0)+1;
+  });
+  const sorted=Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,7);
+  if(barChart) barChart.destroy();
+  barChart=new Chart(document.getElementById('barChart'),{
+    type:'bar',
+    data:{labels:sorted.map(e=>e[0]),datasets:[{data:sorted.map(e=>e[1]),backgroundColor:'#0a5c36',borderRadius:2,hoverBackgroundColor:'#073d24'}]},
+    options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{grid:{color:'#e6e1d8'},ticks:{color:'#9a9287',font:{size:11}}},y:{grid:{display:false},ticks:{color:'#6b6459',font:{size:11}}}}}
+  });
+}
+
+async function loadResults(){
+  if(!scanId){document.getElementById('loadingState').textContent='No scan ID. Go back and run a scan.';return;}
+  try {
+    const [findingsRes,scansRes]=await Promise.all([fetch('/scans/'+scanId),fetch('/scans')]);
+    const findings=await findingsRes.json();
+    const scans=await scansRes.json();
+    const thisScan=Array.isArray(scans)?scans.find(s=>s.id==scanId):null;
+    const repoUrl=thisScan?thisScan.repo_url:'Unknown repository';
+    allFindings=findings;
+
+    const high=findings.filter(f=>(f.severity||'').toLowerCase()==='high').length;
+    const med=findings.filter(f=>(f.severity||'').toLowerCase()==='medium').length;
+    const low=findings.filter(f=>(f.severity||'').toLowerCase()==='low').length;
+    const files=[...new Set(findings.map(f=>f.file_path))].length;
+    const repo=repoUrl.split('/').slice(-2).join('/');
+
+    document.getElementById('summaryText').innerHTML=`Scanned <strong>${repo}</strong>. Found ${findings.length} security issue${findings.length!==1?'s':''} across ${files} file${files!==1?'s':''} — ${high} critical, ${med} warning${med!==1?'s':''}.`;
+    document.getElementById('statTotal').textContent=findings.length;
+    document.getElementById('statHigh').textContent=high;
+    document.getElementById('statMed').textContent=med;
+    document.getElementById('statLow').textContent=low;
+    document.getElementById('sb-count-all').textContent=findings.length;
+    document.getElementById('sb-count-high').textContent=high;
+    document.getElementById('sb-count-medium').textContent=med;
+    document.getElementById('sb-count-low').textContent=low;
+
+    const backendFindings=findings.filter(isBackend);
+    const frontendFindings=findings.filter(isFrontend);
+    document.getElementById('backend-count').textContent=backendFindings.length+' finding'+(backendFindings.length!==1?'s':'');
+    document.getElementById('frontend-count').textContent=frontendFindings.length+' finding'+(frontendFindings.length!==1?'s':'');
+
+    renderCharts(findings);
+    renderCards(backendFindings,'backendList');
+    renderCards(frontendFindings,'frontendList');
+    renderRemedPanel(backendFindings,'backend-remed','backendRemedList');
+    renderRemedPanel(frontendFindings,'frontend-remed','frontendRemedList');
+
+    if(Array.isArray(scans)&&scans.length){
+      document.getElementById('historyList').innerHTML=scans.map(s=>`
+        <div class="history-item" onclick="window.location.href='/results?scan_id=${s.id}'">
+          <div>
+            <div class="history-url">${s.repo_url}</div>
+            <div class="history-meta">${new Date(s.timestamp).toLocaleString()}</div>
+          </div>
+          <span class="history-badge">${s.total_findings} findings</span>
+        </div>
+      `).join('');
+      document.getElementById('historySidebar').innerHTML=scans.slice(0,5).map(s=>{
+        const url=s.repo_url.split('/').slice(-2).join('/');
+        return `<div class="sb-history-item" onclick="window.location.href='/results?scan_id=${s.id}'">${url}</div>`;
+      }).join('');
+    }
+
+    document.getElementById('loadingState').style.display='none';
+    document.getElementById('resultsContent').style.display='block';
+  } catch(e){
+    document.getElementById('loadingState').textContent='Failed to load results: '+e.message;
+  }
+}
+
+loadResults();
+</script>
+</body>
+</html>

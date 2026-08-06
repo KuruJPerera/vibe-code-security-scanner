@@ -5,3 +5,4 @@ __pycache__/
 *.json
 .DS_Store
 .DS_Store
+.env

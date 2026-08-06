@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Vibe Code Security Scanner</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#faf8f5;font-family:-apple-system,'Helvetica Neue',Helvetica,Arial,sans-serif;color:#1c1a17}
+a{color:#0a5c36;text-decoration:none}
+a:hover{color:#073d24;text-decoration:underline}
+.topbar{background:#fff;border-bottom:1px solid #e6e1d8;padding:18px 48px;display:flex;align-items:center;justify-content:space-between}
+.logo{width:28px;height:28px;background:#0a5c36;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff}
+.topbar-left{display:flex;align-items:center;gap:10px}
+.topbar-title{font-size:15px;font-weight:600;letter-spacing:-0.01em}
+.topbar-nav{display:flex;align-items:center;gap:28px}
+.btn-primary{display:inline-flex;align-items:center;gap:8px;background:#0a5c36;color:#fff;font-size:13px;font-weight:600;padding:9px 18px;border-radius:3px;text-decoration:none}
+.btn-primary:hover{background:#073d24;text-decoration:none;color:#fff}
+.btn-ghost{display:inline-flex;align-items:center;gap:8px;background:transparent;color:#4a453d;font-size:14px;padding:13px 22px;border-radius:3px;border:1px solid #d8d2c6;text-decoration:none}
+.btn-ghost:hover{border-color:#0a5c36;color:#0a5c36;text-decoration:none}
+.hero{max-width:760px;margin:0 auto;padding:96px 48px 88px}
+.eyebrow{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#0a5c36;margin-bottom:22px}
+.hero h1{font-size:52px;font-weight:700;line-height:1.08;letter-spacing:-0.015em;margin-bottom:24px}
+.hero-sub{font-size:18px;line-height:1.65;color:#4a453d;max-width:600px;margin-bottom:40px}
+.cta-row{display:flex;gap:14px;margin-bottom:56px;flex-wrap:wrap}
+.btn-hero{display:inline-flex;align-items:center;gap:8px;background:#0a5c36;color:#fff;font-size:15px;font-weight:600;padding:13px 28px;border-radius:3px;text-decoration:none}
+.btn-hero:hover{background:#073d24;text-decoration:none;color:#fff}
+.checks-section{border-top:1px solid #e6e1d8;padding-top:28px}
+.checks-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:#9a9287;margin-bottom:16px}
+.checks-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 32px}
+.check-item{display:flex;align-items:baseline;gap:10px;font-size:14px;color:#4a453d}
+.dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;margin-top:5px}
+.dot-red{background:#b3261e}
+.dot-amber{background:#8a5a00}
+.steps-section{background:#fff;border-top:1px solid #e6e1d8;border-bottom:1px solid #e6e1d8;padding:72px 48px}
+.steps-inner{max-width:760px;margin:0 auto}
+.steps-eyebrow{font-size:11px;font-weight:600;color:#0a5c36;text-transform:uppercase;letter-spacing:.08em;margin-bottom:14px}
+.steps-title{font-size:26px;font-weight:700;letter-spacing:-0.01em;margin-bottom:40px}
+.steps-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:36px}
+.step-num{font-size:32px;font-weight:700;color:#d8d2c6;margin-bottom:14px;font-variant-numeric:tabular-nums}
+.step-title{font-size:15px;font-weight:600;margin-bottom:8px}
+.step-desc{font-size:13px;color:#6b6459;line-height:1.65}
+.footer{padding:20px 48px;display:flex;align-items:center;justify-content:space-between}
+.footer-text{font-size:12px;color:#9a9287}
+@media(max-width:768px){
+  .topbar{padding:14px 24px}
+  .hero{padding:56px 24px}
+  .hero h1{font-size:34px}
+  .checks-grid{grid-template-columns:1fr}
+  .steps-section{padding:48px 24px}
+  .steps-grid{grid-template-columns:1fr;gap:24px}
+  .footer{padding:16px 24px;flex-direction:column;gap:8px;text-align:center}
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="logo">VS</div>
+    <span class="topbar-title">Vibe Code Security Scanner</span>
+  </div>
+  <div class="topbar-nav">
+    <a href="/results" style="font-size:13px;color:#6b6459">Sample report</a>
+    <a href="/scanner" class="btn-primary">Run a scan</a>
+  </div>
+</div>
+
+<section class="hero">
+  <div class="eyebrow">Open source · Security audit for AI-generated code</div>
+  <h1>Find the vulnerabilities<br/>vibe coding leaves behind.</h1>
+  <p class="hero-sub">AI tools generate working code in minutes. They also skip the security controls — missing auth, hardcoded keys, unvalidated input. This scanner reads your repository the way an attacker would and hands back a ranked report.</p>
+  <div class="cta-row">
+    <a href="/scanner" class="btn-hero">Start scanning — it's free</a>
+    <a href="https://github.com/KuruJPerera/vibe-code-security-scanner" target="_blank" class="btn-ghost">View source on GitHub</a>
+  </div>
+  <div class="checks-section">
+    <div class="checks-label">What it catches</div>
+    <div class="checks-grid">
+      <div class="check-item"><span class="dot dot-red"></span>Missing authentication on API routes</div>
+      <div class="check-item"><span class="dot dot-red"></span>API keys hardcoded in source</div>
+      <div class="check-item"><span class="dot dot-red"></span>SQL injection via string formatting</div>
+      <div class="check-item"><span class="dot dot-red"></span>Tokens stored in localStorage</div>
+      <div class="check-item"><span class="dot dot-amber"></span>No rate limiting on login routes</div>
+      <div class="check-item"><span class="dot dot-amber"></span>Missing security headers</div>
+      <div class="check-item"><span class="dot dot-amber"></span>Debug mode enabled in production</div>
+      <div class="check-item"><span class="dot dot-amber"></span>Outdated dependencies with known CVEs</div>
+    </div>
+  </div>
+</section>
+
+<section class="steps-section">
+  <div class="steps-inner">
+    <div class="steps-eyebrow">How it works</div>
+    <div class="steps-title">Three steps to a full security report</div>
+    <div class="steps-grid">
+      <div>
+        <div class="step-num">01</div>
+        <div class="step-title">Paste a GitHub URL</div>
+        <div class="step-desc">Enter any public repository URL. The scanner clones it automatically — no setup, no API keys.</div>
+      </div>
+      <div>
+        <div class="step-num">02</div>
+        <div class="step-title">Scanner analyses the code</div>
+        <div class="step-desc">20 checks run across Python, HTML, and JavaScript files using AST parsing and pattern detection.</div>
+      </div>
+      <div>
+        <div class="step-num">03</div>
+        <div class="step-title">Review findings and fixes</div>
+        <div class="step-desc">Each finding lists severity, file, line number, and a plain-English fix with a code example.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="footer">
+  <span class="footer-text">Vibe Code Security Scanner — open source security tooling</span>
+  <a href="https://github.com/KuruJPerera/vibe-code-security-scanner" target="_blank" style="font-size:12px">github.com/KuruJPerera</a>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Scan — Vibe Code Security Scanner</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#faf8f5;font-family:-apple-system,'Helvetica Neue',Helvetica,Arial,sans-serif;color:#1c1a17}
+a{color:#0a5c36;text-decoration:none}
+a:hover{color:#073d24}
+@keyframes spin{to{transform:rotate(360deg)}}
+.topbar{background:#fff;border-bottom:1px solid #e6e1d8;padding:18px 48px;display:flex;align-items:center;justify-content:space-between}
+.logo{width:28px;height:28px;background:#0a5c36;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff}
+.topbar-left{display:flex;align-items:center;gap:10px}
+.topbar-title{font-size:15px;font-weight:600;letter-spacing:-0.01em}
+.wrap{max-width:640px;margin:0 auto;padding:72px 24px}
+.back{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#6b6459;margin-bottom:36px}
+.back:hover{color:#1c1a17}
+.page-title{font-size:28px;font-weight:700;letter-spacing:-0.01em;margin-bottom:10px}
+.page-sub{font-size:14px;color:#6b6459;line-height:1.65;margin-bottom:36px}
+.card{background:#fff;border:1px solid #e6e1d8;border-radius:4px;padding:28px}
+.input-label{font-size:11px;font-weight:600;color:#6b6459;text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px}
+.url-input{width:100%;padding:12px 14px;border-radius:3px;border:1px solid #d8d2c6;background:#faf8f5;color:#1c1a17;font-size:14px;outline:none;margin-bottom:14px;font-family:inherit;transition:border-color .15s}
+.url-input:focus{border-color:#0a5c36}
+.url-input::placeholder{color:#b8b2a8}
+.scan-btn{width:100%;padding:12px;border-radius:3px;border:none;background:#0a5c36;color:#fff;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:background .15s}
+.scan-btn:hover{background:#073d24}
+.scan-btn:disabled{opacity:.6;cursor:wait}
+.spinner{width:13px;height:13px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite;display:none}
+.status{margin-top:12px;font-size:13px;color:#6b6459;min-height:18px}
+.examples{margin-top:28px}
+.examples-label{font-size:12px;font-weight:600;color:#9a9287;margin-bottom:10px}
+.example{padding:12px 16px;background:#fff;border:1px solid #e6e1d8;border-radius:3px;margin-bottom:8px;cursor:pointer;transition:border-color .15s}
+.example:hover{border-color:#0a5c36}
+.example-url{font-size:13px;color:#0a5c36;font-weight:500}
+.example-desc{font-size:12px;color:#9a9287;margin-top:2px}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="logo">VS</div>
+    <span class="topbar-title">Vibe Code Security Scanner</span>
+  </div>
+  <a href="/" style="font-size:13px;color:#6b6459">Home</a>
+</div>
+
+<div class="wrap">
+  <a href="/" class="back">← Back to home</a>
+  <div class="page-title">Scan a repository</div>
+  <p class="page-sub">Enter any public GitHub repository URL. The scanner clones it, runs 20 security checks, and takes you to a ranked findings report.</p>
+
+  <div class="card">
+    <div class="input-label">Repository URL</div>
+    <input class="url-input" id="repoUrl" type="text" placeholder="https://github.com/username/repository" autofocus/>
+    <button class="scan-btn" id="scanBtn" onclick="runScan()">
+      <div class="spinner" id="spinner"></div>
+      <span id="btnLabel">Run security scan</span>
+    </button>
+    <div class="status" id="statusText"></div>
+  </div>
+
+  <div class="examples">
+    <div class="examples-label">Try an example</div>
+    <div class="example" onclick="setUrl('https://github.com/KuruJPerera/cloud-misconfiguration-scanner')">
+      <div class="example-url">github.com/KuruJPerera/cloud-misconfiguration-scanner</div>
+      <div class="example-desc">Python AWS scanner — expect missing input validation findings</div>
+    </div>
+    <div class="example" onclick="setUrl('https://github.com/KuruJPerera/llm-prompt-injection-scanner')">
+      <div class="example-url">github.com/KuruJPerera/llm-prompt-injection-scanner</div>
+      <div class="example-desc">LLM scanner — expect missing HTTPS and rate limiting findings</div>
+    </div>
+  </div>
+</div>
+
+<script>
+function setUrl(url){
+  document.getElementById('repoUrl').value = url;
+  document.getElementById('repoUrl').focus();
+}
+
+async function runScan(){
+  const url = document.getElementById('repoUrl').value.trim();
+  if(!url) return;
+  const btn = document.getElementById('scanBtn');
+  const spinner = document.getElementById('spinner');
+  const label = document.getElementById('btnLabel');
+  const status = document.getElementById('statusText');
+  btn.disabled = true;
+  spinner.style.display = 'block';
+  label.textContent = 'Scanning...';
+  status.textContent = 'Cloning and scanning repository...';
+  try {
+    const res = await fetch('/scan', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({repo_url: url})
+    });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.detail || 'Scan failed');
+    status.textContent = 'Scan complete. Redirecting to results...';
+    window.location.href = '/results?scan_id=' + data.scan_id;
+  } catch(e){
+    status.textContent = e.message;
+    btn.disabled = false;
+    spinner.style.display = 'none';
+    label.textContent = 'Run security scan';
+  }
+}
+
+document.getElementById('repoUrl').addEventListener('keydown', e => {
+  if(e.key === 'Enter') runScan();
+});
+</script>
+</body>
+</html>
