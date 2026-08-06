@@ -179,7 +179,7 @@ Open a [pull request](https://github.com/KuruJPerera/vibe-code-security-scanner/
 
 ## Author
 
-Jude Perera — BSc Computer Science (Information Security), Royal Holloway, University of London (NCSC Academic Centre of Excellence).
+Jude Perera — BSc Computer Science (Information Security), Royal Holloway, University of London.
 
 [GitHub](https://github.com/KuruJPerera) · [Medium](https://medium.com/@pererajude39) · [LinkedIn](https://linkedin.com/in/Jude-Perera)
 
